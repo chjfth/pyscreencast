@@ -1,0 +1,4 @@
+[global]
+server.socket_host = "*"
+server.socket_port = 88
+server.thread_pool = 5

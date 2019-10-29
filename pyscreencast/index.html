@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Thanks: http://stackoverflow.com/questions/5052543/how-to-fire-ajax-request-periodically
+-->
+<html>
+   <head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+     <link href="/static/style.css" rel="stylesheet">
+     <script src="/static/jquery-2.0.3.min.js"></script>
+     <script type="text/javascript">
+       function strpad00(s)
+		{
+		    s = s + '';
+		    if (s.length === 1) s = '0'+s;
+		    return s;
+		}
+		
+		$(document).ready(function() {
+
+			var timer = true;
+			var myimg = $("#newimg");
+			var imgwidth=400, imgheight=400; // assume 400
+			var usertext_div = $("#usertext_region")
+			
+         function worker() {
+           $.ajax({
+				url: "/getnewimg",
+				timeout: 5000, // 5 seconds timeout. Without this, iPad may use a 10 minute+ timeout.
+				
+				cache: false 
+					// [Workaround for IE11] This will result in a request with a random timestamp, like http://localhost:8080/getnewimg?_=1471775759585 ,
+					// so to bypass IE11/Edge's silly cache behavior.
+					// http://stackoverflow.com/questions/25858981/javascript-misbehaving-in-ie-until-dev-tools-opened-not-console-related
+					// http://stackoverflow.com/questions/31107364/weird-ie-javascript-only-works-in-development-mode-f12
+            }).done(function(json) { // function(data) { ... }
+			  
+			  if(!timer) {
+			  	return // reject network-delayed screen cast after QR has been requested
+			  }
+			  
+			  // var json = $.parseJSON(data); // no need to do this, because the json param is already a json object. thanks: http://stackoverflow.com/a/15617202/151453
+    		  imgbath = json.imgbath;
+    		  timestr = json.imgtime; // display server-side time on client browser
+    		  imgwidth = json.imgwidth; imgheight = json.imgheight;
+              
+              if ( typeof worker.s_prev_imgbath == 'undefined' ) {
+              	worker.s_prev_imgbath = '/none.jpg' // initialize static var. http://stackoverflow.com/a/1535650/151453
+              }
+              
+              if (imgbath!=worker.s_prev_imgbath) {
+              	// fetch new image and time display
+              	myimg.attr('src', imgbath).show();
+//			  	var now = new Date();
+//			  	var timestr = now.getFullYear()+"-"+(now.getMonth()+1)+"-"+(now.getDate())+" "+strpad00(now.getHours())+":"+strpad00(now.getMinutes())+":"+strpad00(now.getSeconds());
+              	
+              	worker.s_prev_imgbath = imgbath
+              }
+              
+              $("#nowtime").text(timestr);
+              $("#imgblock").css("border-style", "hidden")
+              timer = setTimeout(worker, 900); // launch timer, http://stackoverflow.com/q/13969345/151453 , http://stackoverflow.com/q/2833951/151453
+              
+              resizeImg();
+            
+            }).fail(function(xhr, status, error) { // or .always(data) ; 
+              $("#imgblock").css("border-style", "dotted")
+              	.css("border-width", "5px")
+              	.css("border-color", "red") // a red border to indicate server unreachable
+              timer = setTimeout(worker, 3100);
+              console.log("ajax POST error: status="+status)
+            });
+         }
+         
+         usertext_div.hide();
+         
+	 	 worker();
+
+		var htmlbody = $('body');
+		var thewindow = $(window);
+
+		function resizeImg() {
+			// [ imgwidth, imgheight ] as implicit input
+			// We need to display the QR code inside the browser without any trimming, and makes it as large as possible,
+			// so calculate the actual width & height pixels required.
+			var canvas_w = htmlbody.width() - parseInt(htmlbody.css('margin-left')) - parseInt(htmlbody.css('margin-right'));
+				
+			var canvas_h = thewindow.height() - parseInt(htmlbody.css('margin-top')) - parseInt(htmlbody.css('margin-bottom')) 
+				- $('#topbar').outerHeight(true);
+				// Without parseInt(), the return value from .css('margin-top') will be '8px' etc, so cannot get involved in arithmetic calculation.
+//			console.log('Myimg canvas width & height: ' + canvas_w +','+ canvas_h)
+			var canvas_ratio = canvas_w/canvas_h;
+			
+			var cast_ratio = imgwidth/imgheight;
+			if(canvas_ratio>cast_ratio) {
+				myimg.height(canvas_h).width(canvas_h*cast_ratio);
+			}
+			else {
+				myimg.width(canvas_w).height(canvas_w/cast_ratio);
+			}
+		}
+
+		$("#btnclear1").click(function() {
+			$("#comment").val("").focus();
+		});
+
+		$("#btnclear2").click(function() {
+			$("#chjtext").val("").focus();
+		});
+
+		$("#btnshare").click(function() {
+		
+			if(timer) {
+				clearTimeout(timer);
+				timer = null;
+				
+				myimg.attr('src', '/temp/_qrcode_url.png');
+				$("#btnshare").text('返回')
+				
+				imgwidth = 400; imgheight = 400; // assume it is 400*400, only the x/y ratio cares
+				resizeImg(); 
+	
+				usertext_div.show();
+			} 
+			else {
+				$("#btnshare").text('分享');
+				myimg.hide(); // to avoid seeing an distorted QR code before a new cast image is retrieved.
+				timer = true;
+				worker.s_prev_imgbath = '' // so that worker() will re-display the old image
+				worker();
+
+				usertext_div.hide();
+			}
+			
+		});
+		
+		$("#chjsendtext").click(function() {
+			var utext = $('#chjtext').val()
+			if(!utext)
+				return
+			
+			$.ajax({
+				type: "PUT", // or "POST", resulting same http header(except PUT/POST itself)
+				url: "/set_usertext",
+				timeout: 2000,
+				data : {
+                	usertext : utext
+            	},
+            })
+		});
+
+		$("#chjgettext").click(function() {
+			$.ajax({
+				url: "/get_usertext",
+				timeout: 2000,
+				cache: false
+			}).done(function(json) {
+
+				usertext = json.usertext
+				// alert(usertext)
+				$("#chjtext").val(usertext).focus();
+		   })
+
+		});
+	
+	});
+
+     </script>
+     
+   </head>
+   <body>
+     <div>
+
+     <div id="topbar" class="inputContainer" style="width: auto">
+      <label id="nowtime" class="floatleft" title="Server time when generating this image.">nowtime</label>
+      <button id="btnshare" class="floatright">分享</button>
+      <div style="visibility:hidden"><input id="comment" type="text" value="comment?" /></div>
+     </div>
+
+		<div id="imgblock">
+     	<img id="newimg" width="100%" src="/static/whiteblock.png" />
+     	</div>
+     </div>
+     
+	<div id="usertext_region">
+		<div class="flex_btn_width"> 
+			<button id="btnclear2" class="btn_height1">清空</button>
+			<button id="chjgettext" class="btn_height1 btn_snap_bottom">获取</button>
+		</div>
+
+		 <textarea id="chjtext"></textarea>
+
+		<div class="flex_btn_width"> 
+			<button id="chjsendtext" class="btn_height1 btn_height2 btn_snap_bottom">发送文本</button>
+		</div>
+	 </div>
+	 
+   </body>
+</html>
+

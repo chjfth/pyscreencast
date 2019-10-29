@@ -1,0 +1,485 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# This is a web server(on for Windows), which cast current screen image to client web browser.
+# Client web browser gets an index.html who periodically requests new image from server, via AJAX.
+
+import os, sys
+import shutil
+import filecmp
+import time
+import thread
+import win32con
+import win32gui
+import win32ui 
+import win32api
+import ctypes
+import locale
+import ConfigParser
+import traceback
+# import binascii
+
+
+import Image
+import pyqrcode
+import cherrypy
+
+THIS_PY_DIR = os.path.dirname(__file__)
+THIS_PROGRAM = os.path.basename(__file__)
+sys.path.append( os.path.join(THIS_PY_DIR,'../_pyshare') );
+from selfclean_tempfile import selfclean_create_tempfile
+
+sys_codepage = locale.getpreferredencoding(True)
+
+g_config_ini = os.path.join(THIS_PY_DIR, 'config.ini') # INI content will override following const
+g_ini_section = 'global'
+SERVER_PORT = 8080
+TEMPIMG_PRESERVE_MINUTES = 60 * 10
+SCREEN_CROP_LEFT = 0
+SCREEN_CROP_RIGHT = 0
+SCREEN_CROP_TOP = 0
+SCREEN_CROP_BOTTOM = 0
+DELETE_TEMP_ON_QUIT = 1 # 1 means yes, 0 means no
+MYIP_OVERRIDE = ''
+SERVER_SHOW_QRCODE = 1 # 1/0: true/false
+
+g_quit_flag = 0
+
+class Img:
+	def __init__(self, path='', w=0, h=0):
+		self.path = path
+		self.width = w  # pixel width
+		self.height = h # pixel height
+		
+g_latest_img = None # will be a Img class
+g_qr_img = None # will be a Img class
+
+g_testvar = 0
+
+class SaveImageError(Exception):
+	def __init__(self, errmsg):
+		self.errmsg = errmsg
+	def __str__(self):
+		return self.errmsg
+
+def save_screen_as_bmp(monitr, filepath):
+	# Thanks to http://stackoverflow.com/a/3586280/151453
+
+	# monitr is a 3-ele tuple: (hMonitor, hdcMonitor, PyRECT)
+	# win32api.EnumDisplayMonitors() returns such tuples.
+	# monitr. is like r'\\.\DISPLAY1' or r'\\.\DISPLAY2' etc
+
+	user32 = ctypes.windll.user32
+	user32.SetProcessDPIAware()
+
+	moninfo = win32api.GetMonitorInfo(monitr[0])
+	screenw = moninfo['Monitor'][2]-moninfo['Monitor'][0]
+	screenh = moninfo['Monitor'][3]-moninfo['Monitor'][1]
+	winDisplayName = moninfo['Device']
+		
+	x = SCREEN_CROP_LEFT
+	y = SCREEN_CROP_TOP
+	w = screenw - SCREEN_CROP_LEFT - SCREEN_CROP_RIGHT
+	h = screenh - SCREEN_CROP_TOP - SCREEN_CROP_BOTTOM
+
+	isok = True
+	try:
+		# hwnd = win32gui.FindWindow(None, "DEV.ahk")
+		intDC = win32gui.CreateDC('DISPLAY', winDisplayName, None) # returns an int
+			# limitation: mouse cursor and caret will not be captured.
+		dcWin=win32ui.CreateDCFromHandle(intDC) # dcWin is a pyCDC object
+		cDC=dcWin.CreateCompatibleDC()
+		dataBitMap = win32ui.CreateBitmap()
+		dataBitMap.CreateCompatibleBitmap(dcWin, w, h)
+		cDC.SelectObject(dataBitMap)
+		cDC.BitBlt((0,0),(w, h) , dcWin, (x,y), win32con.SRCCOPY)
+			# Note: Having Win81 enter lock-screen will cause BitBlt to raise win32ui.error .
+		dataBitMap.SaveBitmapFile(cDC, filepath)
+	except win32ui.error as e:
+		raise SaveImageError(
+			'Got win32ui.error exception in save_screen_as_bmp("%s", "%s").'%(
+			winDisplayName, filepath))
+	finally:
+		# Free Resources
+		dcWin.DeleteDC() # No need to do `win32gui.DeleteDC(intDC)` because dcWin represents intDC (hope so)
+		cDC.DeleteDC()
+		win32gui.DeleteObject(dataBitMap.GetHandle())
+
+	global g_testvar
+#	g_testvar+=1; 
+#	if g_testvar==3: return 9/(g_testvar-3) # trigger exception (test only)
+	
+
+def save_screen_image(monitr, imgpath, tmpdir=""):
+	# Capture the screen and save it to a image file.
+	# imgpath: the image filepath to save, including dir & filename.
+	bmpname = "__temp.bmp"
+	if tmpdir:
+		bmppath = os.path.join(tmpdir, bmpname)
+	else:
+		bmppath = os.path.join(os.path.split(imgpath)[0], bmpname)
+	
+	save_screen_as_bmp(monitr, bmppath)
+	
+	imsrc = Image.open(bmppath)
+	
+	if imgpath.endswith('.jpg'):
+		imsrc.save(imgpath, quality=80)
+	else:
+		imsrc.save(imgpath)
+
+	newImg = Img(imgpath, imsrc.size[0], imsrc.size[1])
+	return newImg
+
+
+def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
+	global g_latest_img # input and output
+	
+	# Save current image to a tempimg.
+	# Compare the image content of tempimg and g_latest_img.path. 
+	# If they are the same, I'll leave g_latest_img.path intact.
+	# If they are different, I'll rename tempimg to a timestamp-ed filename 
+	# and update g_latest_img.path with this new filename so that 
+	# the web server thread will see this updated image path.
+	
+	if not os.path.exists(imgdir):
+		os.mkdir(imgdir)
+	
+	tmpimgpath = os.path.join(imgdir, '_temp'+imgextname)
+	newImg = save_screen_image(monitr, tmpimgpath)
+	
+	if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
+		return g_latest_img.path # g_latest_img intact
+	else:
+		newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES*60)
+		shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
+		
+		newImg.path = newpath.replace(os.sep, '/')
+		g_latest_img = newImg # update g_latest_img
+		print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
+		return
+
+
+def get_tempdir():
+	return os.path.join(THIS_PY_DIR, 'temp')
+
+def thread_screen_grabber(is_wait_cherrypy, monitr):
+	
+	# Wait until cherrypy is ready to accept http request. Thanks to: http://stackoverflow.com/q/2988636/151453
+	# If cherrypy cannot start(listen port occupied etc), there is no sense to grab the screen 
+	# and no sense to show a QR code on server machine's screen.
+	if is_wait_cherrypy:
+		print "###[worker-thread] cherrypy.server.wait() wait for cherrypy server starting..."
+		cherrypy.server.wait()
+		print "###[worker-thread] cherrypy.server.wait() done. cherrypy server started.\n"
+	
+	# Since the server has started, I turn off screen logging.
+	cherrypy.log.screen = False
+	
+	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT)
+
+	global g_quit_flag
+	while g_quit_flag==0:
+		
+		try:
+			save_screen_with_timestamp(monitr, get_tempdir(), '.jpg')
+		except SaveImageError as e:
+			print '####### %s Will retry later'%(e.errmsg)
+		except:
+			print '####### Got exception in thread_screen_grabber thread. Will retry later.'
+			traceback.print_exception(*sys.exc_info()) # print the traceback text.
+		
+		for i in range(20):
+			time.sleep(0.1)
+			if g_quit_flag:
+				break
+
+	print "thread_screen_grabber() quitted."
+	g_quit_flag = 2
+
+
+
+class StringGenerator(object):
+	@cherrypy.expose
+	def index(self):
+		return open( os.path.join(THIS_PY_DIR, 'index.html') )
+
+	@cherrypy.expose
+	def getnewimg_textonly(self): # memo, not used
+#		cherrypy.session['mystring'] = some_string # memo 
+		return '/temp/'+os.path.split(g_latest_img.path)[1]
+
+	@cherrypy.expose
+	@cherrypy.tools.json_out() # this will result in http response header Content-Type: application/json
+	def getnewimg(self, _='0'): 
+		# note: the param _ is only for workaround of IE11's cache behavior.
+		# Ref:
+		#	http://stackoverflow.com/questions/25858981/javascript-misbehaving-in-ie-until-dev-tools-opened-not-console-related
+		#	http://stackoverflow.com/questions/31107364/weird-ie-javascript-only-works-in-development-mode-f12
+		if not g_latest_img:
+			return {
+			'imgbath' : '/static/whiteblock.png' ,
+			'imgtime' : 'server not ready', 
+		}
+		
+		newimg_filename = os.path.split(g_latest_img.path)[1]
+		epsec_file = os.path.getmtime(g_latest_img.path)
+		imgtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epsec_file))
+		return { # return a json object
+			'imgbath' : '/temp/'+newimg_filename , # "bath" implies path from web server root
+			'imgtime' : imgtime, 
+			'imgwidth' : g_latest_img.width,
+			'imgheight' : g_latest_img.height,
+		}
+
+	@cherrypy.expose
+	@cherrypy.tools.json_out() 
+	def getqrimg(self): 
+		if not g_latest_img:
+			return {
+			'imgbath' : '/temp/_qrcode_url.png' ,
+			'imgtime' : '', 
+			'imgwidth' : g_qr_img.width,
+			'imgheight' : g_qr_img.height,
+		}
+
+	@cherrypy.expose
+	@cherrypy.tools.json_out() 
+	def set_usertext(self, usertext):
+		
+		ansi = usertext.encode(sys_codepage, errors='replace')
+		print 'Got set_usertext: '+ ansi[:8000] # usertext[:8000]
+		
+		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
+		open(txtpath, 'w').write(usertext.encode('utf8')) # If not encode('utf8'), it fails and Chrome gets weird stack trace
+		os.system('start "" "%s"'%(txtpath))
+
+	@cherrypy.expose
+	@cherrypy.tools.json_out() # this will result in http response header Content-Type: application/json
+	def get_usertext(self, _='0'):
+
+		print 'Got get_usertext.'
+		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
+		
+		try:
+			filetxt = open(txtpath, 'r').read()
+		except IOError as e: # may be file not exist
+			filetxt = ''
+		
+		if filetxt:
+			txt_utf8 = 'Get text error! Check console log for reason.'
+			try:
+				txt_utf8 = filetxt.decode('utf8')
+			except UnicodeDecodeError as e:
+				try:
+					txt_utf8 = filetxt.decode(sys_codepage).encode('utf8')
+				except:
+					traceback.print_exception(*sys.exc_info()) # print the traceback text.
+			except:
+				traceback.print_exception(*sys.exc_info()) # print the traceback text.
+			
+		else:
+			# create the file:
+			txt_utf8 = 'empty now'
+			open(txtpath, 'w').write('empty now')
+			os.system('start "" "%s"'%(txtpath))
+
+		return { # return a json object
+			'usertext' : txt_utf8
+		}
+
+#	@cherrypy.expose
+#	def display(self):
+#		return cherrypy.session['mystring']
+
+
+# test code: (unused yet)
+def gbk_errorPage(**kwargs):
+  template = cherrypy._cperror._HTTPErrorTemplate
+  return template.encode('gbk').decode('utf8') % kwargs
+
+
+def start_webserver():
+	# Web server cpde based on tut06.py from http://docs.cherrypy.org/en/latest/tutorials.html
+	conf = {
+		'/': {
+			'tools.sessions.on': False, # True,
+			'tools.staticdir.root': os.path.abspath(os.getcwd())
+		},
+		'/static': {
+			'tools.staticdir.on': True,
+			'tools.staticdir.dir': os.path.join(THIS_PY_DIR, 'public')
+		},
+		'/temp': {
+			'tools.staticdir.on': True,
+			'tools.staticdir.dir': os.path.join(THIS_PY_DIR, 'temp')
+		}
+	}
+	cherrypy.server.socket_port = SERVER_PORT
+	cherrypy.server.socket_host = '0.0.0.0'
+	cherrypy.log.access_file = 'access.log'
+	cherrypy.log.error_file = 'error.log'
+	
+#	cherrypy.error_page.default = gbk_errorPage 
+		# AttributeError: 'module' object has no attribute 'error_page'
+		# And no luck with http://stackoverflow.com/a/28192448/151453
+
+	
+	try:
+		cherrypy.quickstart(StringGenerator(), '/', conf)
+		# print '++++++++++++++++++++++++++'
+		# Note: If user press Ctrl+C to quit the server, we'll get here.
+		# !!! But, If the server fails to start due to listen port occupied by others, 
+		# we will neither get here, nor the following except. It seems that the 
+		# error thread kill the whole python process.
+	except:
+		print '================[CHJ DEBUG] sys.exc_type=%s'%(sys.exc_type)
+		traceback.print_exception(*sys.exc_info())
+
+
+def get_my_ipaddress_str():
+	import socket
+	hostname = socket.gethostname()
+	ipstr = socket.gethostbyname(hostname)
+	return ipstr
+	
+
+def gen_QR_html(ipstr, http_port):
+	# Note: This html(with QR code) is to be viewed on server machine, not on client machine.
+	# This QR code will be display on the big meeting room projector screen of the server PC,
+	# so that attenders(human) can scan this big QR to reach our web server.
+	
+	pngdir = os.path.join(THIS_PY_DIR, 'temp') # local FS png path
+	pngpath = os.path.join(pngdir, '_qrcode_url.png') # local FS png path
+	if not os.path.exists(pngdir):
+		os.mkdir(pngdir)
+
+	url_text = 'http://' + ipstr
+	if http_port!=80:
+		url_text += ':'+str(http_port)
+		
+	qr = pyqrcode.create(url_text)
+	qr.png(pngpath, scale=4, quiet_zone=2)
+
+	# Replace text from html template
+	htmlpath = os.path.join(THIS_PY_DIR, '_qrcode.html')
+	tmpl_htmlpath = os.path.join(THIS_PY_DIR, 'qrcode.html.template')
+	html_text = open(tmpl_htmlpath).read()
+	html_text = html_text.replace('http://x.x.x.x', url_text)
+	html_text = html_text.replace('${FILEPATH_CONFIG_INI}', g_config_ini)
+	open(htmlpath, 'w').write(html_text)
+
+	im_qrcode = Image.open(pngpath)
+	g_qr_img = Img(pngpath, im_qrcode.size[0], im_qrcode.size[1])
+
+	if SERVER_SHOW_QRCODE:
+		os.system(htmlpath) # this should open the system default web browser viewing that html.
+	
+	return
+
+
+def load_ini_configs():
+	global SERVER_PORT
+	global TEMPIMG_PRESERVE_MINUTES
+	global SCREEN_CROP_LEFT, SCREEN_CROP_RIGHT, SCREEN_CROP_TOP, SCREEN_CROP_BOTTOM
+	global DELETE_TEMP_ON_QUIT
+	global MYIP_OVERRIDE
+	global SERVER_SHOW_QRCODE
+	
+	iniobj = ConfigParser.ConfigParser()
+	iniobj.read(g_config_ini)
+
+	try: SERVER_PORT = int(iniobj.get(g_ini_section, 'SERVER_PORT'))
+	except: pass
+	
+	try: 
+		TEMPIMG_PRESERVE_MINUTES = int(iniobj.get(g_ini_section, 'TEMPIMG_PRESERVE_MINUTES'))
+		if(TEMPIMG_PRESERVE_MINUTES<1):
+			TEMPIMG_PRESERVE_MINUTES = 1
+	except: 
+		pass
+
+	try: SCREEN_CROP_LEFT = int(iniobj.get(g_ini_section, 'SCREEN_CROP_LEFT'))
+	except: pass
+
+	try: SCREEN_CROP_RIGHT = int(iniobj.get(g_ini_section, 'SCREEN_CROP_RIGHT'))
+	except: pass
+
+	try: SCREEN_CROP_TOP = int(iniobj.get(g_ini_section, 'SCREEN_CROP_TOP'))
+	except: pass
+
+	try: SCREEN_CROP_BOTTOM = int(iniobj.get(g_ini_section, 'SCREEN_CROP_BOTTOM'))
+	except: pass
+	
+	try: DELETE_TEMP_ON_QUIT = int(iniobj.get(g_ini_section, 'DELETE_TEMP_ON_QUIT'))
+	except: pass
+	
+	try: MYIP_OVERRIDE = iniobj.get(g_ini_section, 'MYIP_OVERRIDE')
+	except: pass
+	if not MYIP_OVERRIDE:
+		MYIP_OVERRIDE = get_my_ipaddress_str()
+
+	try: 
+		SERVER_SHOW_QRCODE = int(iniobj.get(g_ini_section, 'SERVER_SHOW_QRCODE'))
+	except: pass
+
+
+def select_a_monitor():
+	monitrs = win32api.EnumDisplayMonitors()
+	mcount = len(monitrs)
+	if(mcount==1):
+		return monitrs[0] # Only a single display monitor
+	
+	# Let user select a monitor to grab
+	print 'You have more than one monitors. Please select one to use.'
+	for i, mon in enumerate(monitrs):
+		moninfo = win32api.GetMonitorInfo(mon[0])
+		screenw = moninfo['Monitor'][2]-moninfo['Monitor'][0]
+		screenh = moninfo['Monitor'][3]-moninfo['Monitor'][1]
+		print '[%d] %d*%d %s'%(i+1, screenw, screenh, '(Primary)' if moninfo['Flags']==1 else '')
+	
+	while True:
+		ascii_key = raw_input('Type 1 - %d and press Enter:'%(mcount));
+		if len(ascii_key)!=1:
+			continue
+		idx = ord(ascii_key)-ord('0')
+		if idx>=1 and idx<=mcount:
+			break; 
+	
+	return monitrs[idx-1]
+
+
+if __name__=='__main__':
+	
+	print "Jimm Chen's %s version 20190304.1"%(THIS_PROGRAM)
+	
+	load_ini_configs()
+	
+	monitr = select_a_monitor()
+	thread.start_new_thread(thread_screen_grabber, (True, monitr))
+	
+	start_webserver() # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
+	
+	if DELETE_TEMP_ON_QUIT:
+		tempdir = get_tempdir()
+		print '\n\n[pyscreencast] deleting temp dir %s ...'%(tempdir)
+		shutil.rmtree(tempdir, ignore_errors=True)
+
+	print '\n' + '[pyscreencast] done.'
+
+#	thread.start_new_thread(thread_screen_grabber, (1,))
+#
+#	time.sleep(10) # let the thread run for 10 seconds
+#	g_quit_flag = 1 # tell working thread to quit
+#
+#	while g_quit_flag==1:
+#		time.sleep(0.1)
+#
+#	print "main thread done."
+
+
+#	for i in range(1):
+#		print "shot %d"%(i)
+#		#save_screen_as_bmp("_temp.bmp")
+#		save_screen_image("temp.jpg")
+#		time.sleep(0.1)

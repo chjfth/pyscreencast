@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<!-- This html(with QR code) is to be viewed on server machine's screen, not on client machine -->
+<!-- (2016)Memo: IE 8 on Windows 7 does not run the jQuery code correctly. Firefox, Chrome & Safari does. -->
+<html>
+   <head>
+	<meta charset="utf-8">
+     <link href="public/style.css" rel="stylesheet">
+     <script src="public/jquery-2.0.3.min.js"></script>
+     <script type="text/javascript">
+		
+		// thanks: https://css-tricks.com/perfect-full-page-background-image/
+		// These jQuery code makes the QR code picture stretch to fit the whole browser frame,
+		// and its display will resize automatically when you change the browser window size.
+		
+		$(document).ready(function() {
+			// alert( $("#qr_title").height() );
+			var theWindow        = $(window),
+			    $bg              = $("#qr_image"),
+			    aspectRatio      = $bg.width() / $bg.height();
+			
+			// Now, for a rectangular area of [bgwidth*bgheight], we show the QR code inside,
+			// as large as possible, without any trimming.
+			
+			function resizeBg() {
+
+				var bgwidth = theWindow.width();
+				var bgheight = theWindow.height() - $("#qr_title").height() - $("#bottom_line").height();
+//				console.log(' '+bgwidth+" | "+bgheight)
+
+				if ( bgwidth>bgheight ) {
+					$bg.width(bgheight)
+//					console.log('qr_image new width: '+bgheight)
+				} else {
+					$bg.width(bgwidth)
+				}
+			}
+			
+			theWindow.resize(resizeBg).trigger("resize");
+		
+		});
+
+     </script>
+   </head>
+   <body>
+	<div>
+		<!-- note: "http://x.x.x.x" is a replacing signature recognized by pyscreencast.py -->
+		<p class="no-margin" id="qr_title"><a href="http://x.x.x.x">http://x.x.x.x</a></p>
+
+    	<div id="qr_area"><img id="qr_image" src="temp/_qrcode_url.png" /></div>
+    	
+    	<div id="bottom_line">
+    		<p class="ip_tip">如果以上自动推测的 IP 地址不是你期望的，请在配置文件中用 MYIP_OVERRIDE 指定期望的 IP 。
+			<br>配置文件: ${FILEPATH_CONFIG_INI} (有样本文件 config.ini.sample 供拷贝修改)
+			</p>
+			<p class="no-margin" >&nbsp;</p>
+		</div>
+
+	</div>
+   </body>
+</html>
+
