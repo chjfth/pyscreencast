@@ -17,15 +17,12 @@ import ctypes
 import locale
 import ConfigParser
 import traceback
-# import binascii
-
 
 import Image
 import pyqrcode
 import cherrypy
 
 THIS_PY_DIR = os.path.dirname(__file__)
-THIS_PROGRAM = os.path.basename(__file__)
 sys.path.append( os.path.join(THIS_PY_DIR,'../_pyshare') );
 from selfclean_tempfile import selfclean_create_tempfile
 
@@ -246,10 +243,7 @@ class StringGenerator(object):
 	@cherrypy.expose
 	@cherrypy.tools.json_out() 
 	def set_usertext(self, usertext):
-		
-		ansi = usertext.encode(sys_codepage, errors='replace')
-		print 'Got set_usertext: '+ ansi[:8000] # usertext[:8000]
-		
+		print 'Got set_usertext: '+usertext[:8000]
 		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
 		open(txtpath, 'w').write(usertext.encode('utf8')) # If not encode('utf8'), it fails and Chrome gets weird stack trace
 		os.system('start "" "%s"'%(txtpath))
@@ -257,7 +251,6 @@ class StringGenerator(object):
 	@cherrypy.expose
 	@cherrypy.tools.json_out() # this will result in http response header Content-Type: application/json
 	def get_usertext(self, _='0'):
-
 		print 'Got get_usertext.'
 		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
 		
@@ -448,11 +441,7 @@ def select_a_monitor():
 	
 	return monitrs[idx-1]
 
-
 if __name__=='__main__':
-	
-	print "Jimm Chen's %s version 20190304.1"%(THIS_PROGRAM)
-	
 	load_ini_configs()
 	
 	monitr = select_a_monitor()
