@@ -4,6 +4,7 @@
 <html>
    <head>
 	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
      <link href="/static/style.css" rel="stylesheet">
      <script src="/static/jquery-2.0.3.min.js"></script>
      <script type="text/javascript">
@@ -84,7 +85,7 @@
 			var canvas_w = htmlbody.width() - parseInt(htmlbody.css('margin-left')) - parseInt(htmlbody.css('margin-right'));
 				
 			var canvas_h = thewindow.height() - parseInt(htmlbody.css('margin-top')) - parseInt(htmlbody.css('margin-bottom')) 
-				- $('#topbar').height();
+				- $('#topbar').outerHeight(true);
 				// Without parseInt(), the return value from .css('margin-top') will be '8px' etc, so cannot get involved in arithmetic calculation.
 //			console.log('Myimg canvas width & height: ' + canvas_w +','+ canvas_h)
 			var canvas_ratio = canvas_w/canvas_h;
@@ -133,12 +134,16 @@
 		});
 		
 		$("#chjsendtext").click(function() {
+			var utext = $('#chjtext').val()
+			if(!utext)
+				return
+			
 			$.ajax({
-				type: "PUT",
+				type: "PUT", // or "POST", resulting same http header(except PUT/POST itself)
 				url: "/set_usertext",
 				timeout: 2000,
 				data : {
-                	usertext : $('#chjtext').val()
+                	usertext : utext
             	},
             })
 		});
@@ -160,6 +165,7 @@
 	});
 
      </script>
+     
    </head>
    <body>
      <div>
@@ -167,8 +173,7 @@
      <div id="topbar" class="inputContainer" style="width: auto">
       <label id="nowtime" class="floatleft" title="Server time when generating this image.">nowtime</label>
       <button id="btnshare" class="floatright">分享</button>
-      <button id="btnclear1" class="floatright">清空</button>
-      <div><input id="comment" type="text" value="comment?" /></div>
+      <div style="visibility:hidden"><input id="comment" type="text" value="comment?" /></div>
      </div>
 
 		<div id="imgblock">
@@ -176,10 +181,17 @@
      	</div>
      </div>
      
-     <div id="usertext_region">
-       <button id="chjgettext">Get Text</button>
-	     <textarea id="chjtext" rows="5" cols="80" ></textarea>
-       <button id="chjsendtext">Send Text</button> &nbsp;   <button id="btnclear2">Clear</button>
+	<div id="usertext_region">
+		<div class="flex_btn_width"> 
+			<button id="btnclear2" class="btn_height1">清空</button>
+			<button id="chjgettext" class="btn_height1 btn_snap_bottom">获取</button>
+		</div>
+
+		 <textarea id="chjtext"></textarea>
+
+		<div class="flex_btn_width"> 
+			<button id="chjsendtext" class="btn_height1 btn_height2 btn_snap_bottom">发送文本</button>
+		</div>
 	 </div>
 	 
    </body>
