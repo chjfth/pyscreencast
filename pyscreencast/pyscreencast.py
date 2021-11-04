@@ -14,11 +14,11 @@ import win32gui
 import win32ui 
 import win32api
 import ctypes
+from ctypes import windll
 import locale
 import ConfigParser
 import traceback
 # import binascii
-
 
 import Image
 import pyqrcode
@@ -449,9 +449,19 @@ def select_a_monitor():
 	return monitrs[idx-1]
 
 
+def IWantPhysicalResolution():
+	try:
+		# On Win81+, this will succeed:
+		windll.shcore.SetProcessDpiAwareness(2) # 2=PROCESS_PER_MONITOR_DPI_AWARE
+	except:
+		# On Win7, we fall back to this:
+		windll.user32.SetProcessDPIAware()
+
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20190304.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20211104.1"%(THIS_PROGRAM)
+	
+	IWantPhysicalResolution()
 	
 	load_ini_configs()
 	
