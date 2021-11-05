@@ -161,7 +161,7 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 
 
 def get_tempdir():
-	return os.path.join(THIS_PY_DIR, 'temp')
+	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp') )
 
 def thread_screen_grabber(is_wait_cherrypy, monitr):
 	
@@ -312,7 +312,7 @@ def start_webserver():
 		},
 		'/temp': {
 			'tools.staticdir.on': True,
-			'tools.staticdir.dir': os.path.join(THIS_PY_DIR, 'temp')
+			'tools.staticdir.dir': get_tempdir()
 		}
 	}
 	cherrypy.server.socket_port = SERVER_PORT
@@ -349,7 +349,7 @@ def gen_QR_html(ipstr, http_port):
 	# This QR code will be display on the big meeting room projector screen of the server PC,
 	# so that attenders(human) can scan this big QR to reach our web server.
 	
-	pngdir = os.path.join(THIS_PY_DIR, 'temp') # local FS png path
+	pngdir = get_tempdir() # local FS png path
 	pngpath = os.path.join(pngdir, '_qrcode_url.png') # local FS png path
 	if not os.path.exists(pngdir):
 		os.mkdir(pngdir)
@@ -459,7 +459,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20211104.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20211105.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
