@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# This is a web server(on for Windows), which cast current screen image to client web browser.
-# Client web browser gets an index.html who periodically requests new image from server, via AJAX.
+# This is a web server(only for Windows), which cast current screen image to client web browser.
+# Client web browser gets an index.html who periodically requests new images from server, via AJAX.
 
 import os, sys
 import shutil
@@ -42,6 +42,7 @@ SCREEN_CROP_BOTTOM = 0
 DELETE_TEMP_ON_QUIT = 1 # 1 means yes, 0 means no
 MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
+DIR_BACKUP_PNG = ""
 
 g_quit_flag = 0
 
@@ -110,7 +111,7 @@ def save_screen_as_bmp(monitr, filepath):
 #	if g_testvar==3: return 9/(g_testvar-3) # trigger exception (test only)
 	
 
-def save_screen_image(monitr, imgpath, tmpdir=""):
+def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 	# Capture the screen and save it to a image file.
 	# imgpath: the image filepath to save, including dir & filename.
 	bmpname = "__temp.bmp"
@@ -127,6 +128,12 @@ def save_screen_image(monitr, imgpath, tmpdir=""):
 		imsrc.save(imgpath, quality=80)
 	else:
 		imsrc.save(imgpath)
+
+	if backup_imgpath:
+		dir_bkimg = os.path.dirname(backup_imgpath)
+		if not os.path.exists(dir_bkimg):
+			os.mkdir(dir_bkimg)
+		imsrc.save(backup_imgpath)
 
 	newImg = Img(imgpath, imsrc.size[0], imsrc.size[1])
 	return newImg
@@ -146,12 +153,21 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 		os.mkdir(imgdir)
 	
 	tmpimgpath = os.path.join(imgdir, '_temp'+imgextname)
-	newImg = save_screen_image(monitr, tmpimgpath)
+	newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES * 60)
+
+	if DIR_BACKUP_PNG:
+		nowdate = time.strftime('%Y-%m-%d', time.localtime())
+		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowdate)
+		filename_bkpng = os.path.splitext(os.path.basename(newpath))[0] + '.png'
+		filepath_bkpng = os.path.join(dir_bkpng, filename_bkpng)
+	else:
+		filepath_bkpng = None
+
+	newImg = save_screen_image(monitr, tmpimgpath, backup_imgpath=filepath_bkpng)
 	
 	if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
 		return g_latest_img.path # g_latest_img intact
 	else:
-		newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES*60)
 		shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
 		
 		newImg.path = newpath.replace(os.sep, '/')
@@ -385,6 +401,7 @@ def load_ini_configs():
 	global DELETE_TEMP_ON_QUIT
 	global MYIP_OVERRIDE
 	global SERVER_SHOW_QRCODE
+	global DIR_BACKUP_PNG
 	
 	iniobj = ConfigParser.ConfigParser()
 	iniobj.read(g_config_ini)
@@ -423,6 +440,15 @@ def load_ini_configs():
 		SERVER_SHOW_QRCODE = int(iniobj.get(g_ini_section, 'SERVER_SHOW_QRCODE'))
 	except: pass
 
+	try: 
+		DIR_BACKUP_PNG = iniobj.get(g_ini_section, "DIR_BACKUP_PNG")
+		if DIR_BACKUP_PNG and not os.path.exists(DIR_BACKUP_PNG):
+			os.mkdir(DIR_BACKUP_PNG)
+	except OSError:
+		print 'Error: Cannot create DIR_BACKUP_PNG folder: "%s".'%(DIR_BACKUP_PNG)
+		exit(2)
+	except: 
+		pass
 
 def select_a_monitor():
 	monitrs = win32api.EnumDisplayMonitors()
@@ -459,7 +485,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20211105.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20211201.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
