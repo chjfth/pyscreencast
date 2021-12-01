@@ -132,7 +132,7 @@ def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 	if backup_imgpath:
 		dir_bkimg = os.path.dirname(backup_imgpath)
 		if not os.path.exists(dir_bkimg):
-			os.mkdir(dir_bkimg)
+			os.makedirs(dir_bkimg)
 		imsrc.save(backup_imgpath)
 
 	newImg = Img(imgpath, imsrc.size[0], imsrc.size[1])
@@ -150,14 +150,17 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 	# the web server thread will see this updated image path.
 	
 	if not os.path.exists(imgdir):
-		os.mkdir(imgdir)
+		os.makedirs(imgdir)
 	
 	tmpimgpath = os.path.join(imgdir, '_temp'+imgextname)
 	newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES * 60)
 
 	if DIR_BACKUP_PNG:
-		nowdate = time.strftime('%Y-%m-%d', time.localtime())
-		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowdate)
+		now = time.localtime()
+		nowyear = time.strftime('%Y', now)
+		nowdate = time.strftime('%Y-%m-%d', now)
+		nowhour = time.strftime('%H', now)
+		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyear, nowdate, nowhour)
 		filename_bkpng = os.path.splitext(os.path.basename(newpath))[0] + '.png'
 		filepath_bkpng = os.path.join(dir_bkpng, filename_bkpng)
 	else:
@@ -368,7 +371,7 @@ def gen_QR_html(ipstr, http_port):
 	pngdir = get_tempdir() # local FS png path
 	pngpath = os.path.join(pngdir, '_qrcode_url.png') # local FS png path
 	if not os.path.exists(pngdir):
-		os.mkdir(pngdir)
+		os.makedirs(pngdir)
 
 	url_text = 'http://' + ipstr
 	if http_port!=80:
@@ -443,7 +446,7 @@ def load_ini_configs():
 	try: 
 		DIR_BACKUP_PNG = iniobj.get(g_ini_section, "DIR_BACKUP_PNG")
 		if DIR_BACKUP_PNG and not os.path.exists(DIR_BACKUP_PNG):
-			os.mkdir(DIR_BACKUP_PNG)
+			os.makedirs(DIR_BACKUP_PNG)
 	except OSError:
 		print 'Error: Cannot create DIR_BACKUP_PNG folder: "%s".'%(DIR_BACKUP_PNG)
 		exit(2)
