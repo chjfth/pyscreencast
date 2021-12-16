@@ -168,16 +168,25 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 		filepath_bkpng = None
 
 	newImg = save_screen_image(monitr, tmpimgpath, backup_imgpath=filepath_bkpng)
+
+	try:
+		if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
+			return g_latest_img.path # g_latest_img intact
+	except OSError:
+		# Possibly due to the file referred to by g_latest_img has been deleted by selfclean_create_tempfile().
+		# This can happen if:
+		#   we sleep our computer for a time period longer than selfclean_create_tempfile()'s 
+		#   temp-file preserving period, and then wakeup the computer.
+		g_latest_img = None
 	
-	if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
-		return g_latest_img.path # g_latest_img intact
-	else:
-		shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
-		
-		newImg.path = newpath.replace(os.sep, '/')
-		g_latest_img = newImg # update g_latest_img
-		print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
-		return
+	# Prepare a new g_latest_img.
+	
+	shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
+	
+	newImg.path = newpath.replace(os.sep, '/')
+	g_latest_img = newImg # update g_latest_img
+	print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
+	return
 
 
 def nowtimestr_ms_log():
@@ -245,9 +254,9 @@ class StringGenerator(object):
 		#	http://stackoverflow.com/questions/31107364/weird-ie-javascript-only-works-in-development-mode-f12
 		if not g_latest_img:
 			return {
-			'imgbath' : '/static/whiteblock.png' ,
-			'imgtime' : 'server not ready', 
-		}
+				'imgbath' : '/static/whiteblock.png' ,
+				'imgtime' : 'server not ready', 
+			}
 		
 		newimg_filename = os.path.split(g_latest_img.path)[1]
 		epsec_file = os.path.getmtime(g_latest_img.path)
