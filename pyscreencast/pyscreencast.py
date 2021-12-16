@@ -8,6 +8,7 @@ import os, sys
 import shutil
 import filecmp
 import time
+from datetime import datetime
 import thread
 import win32con
 import win32gui
@@ -179,6 +180,11 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 		return
 
 
+def nowtimestr_ms_log():
+	dtnow = datetime.now()
+	timestr = dtnow.strftime('%Y-%m-%d_%H:%M:%S.%f')[:-3] # %f is 6-digit microseconds
+	return timestr
+
 def get_tempdir():
 	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp') )
 
@@ -203,9 +209,11 @@ def thread_screen_grabber(is_wait_cherrypy, monitr):
 		try:
 			save_screen_with_timestamp(monitr, get_tempdir(), '.jpg')
 		except SaveImageError as e:
-			print '####### %s Will retry later'%(e.errmsg)
+			timestr = nowtimestr_ms_log()
+			print('#######[%s] %s Will retry later'%(timestr, e.errmsg))
 		except:
-			print '####### Got exception in thread_screen_grabber thread. Will retry later.'
+			timestr = nowtimestr_ms_log()
+			print('#######[%s] Got exception in thread_screen_grabber thread. Will retry later.'%(timestr))
 			traceback.print_exception(*sys.exc_info()) # print the traceback text.
 		
 		for i in range(20):
@@ -488,7 +496,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20211201.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20211216.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
