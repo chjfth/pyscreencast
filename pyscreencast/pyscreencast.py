@@ -409,7 +409,8 @@ def gen_QR_html(ipstr, http_port):
 	g_qr_img = Img(pngpath, im_qrcode.size[0], im_qrcode.size[1])
 
 	if SERVER_SHOW_QRCODE:
-		os.system(htmlpath) # this should open the system default web browser viewing that html.
+		# Open the system default web browser viewing that html, no blocking myself.
+		os.system('start "SomeTitle" "%s"'%(htmlpath)) 
 	
 	return
 
@@ -505,7 +506,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20220116.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20220116.2"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
