@@ -286,7 +286,7 @@ class StringGenerator(object):
 		ansi = usertext.encode(sys_codepage, errors='replace')
 		print 'Got set_usertext: '+ ansi[:8000] # usertext[:8000]
 		
-		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
+		txtpath = os.path.join(get_tempdir(), 'usertext.txt')
 		open(txtpath, 'w').write(usertext.encode('utf8')) # If not encode('utf8'), it fails and Chrome gets weird stack trace
 		os.system('start "" "%s"'%(txtpath))
 
@@ -295,7 +295,7 @@ class StringGenerator(object):
 	def get_usertext(self, _='0'):
 
 		print 'Got get_usertext.'
-		txtpath = os.path.join(THIS_PY_DIR, 'temp/usertext.txt')
+		txtpath = os.path.join(get_tempdir(), 'usertext.txt')
 		
 		try:
 			filetxt = open(txtpath, 'r').read()
@@ -505,7 +505,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20211216.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20220116.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
