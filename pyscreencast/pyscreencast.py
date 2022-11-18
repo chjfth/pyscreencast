@@ -159,9 +159,10 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
 		nowyear = time.strftime('%Y', now)
+		nowyearmonth = time.strftime('%Y.%m', now)
 		nowdate = time.strftime('%Y-%m-%d', now)
 		nowhour = time.strftime('%H', now)
-		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyear, nowdate, nowhour)
+		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
 		filename_bkpng = os.path.splitext(os.path.basename(newpath))[0] + '.png'
 		filepath_bkpng = os.path.join(dir_bkpng, filename_bkpng)
 	else:
