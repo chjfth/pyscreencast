@@ -150,6 +150,8 @@ def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg
 	# and update g_latest_img.path with this new filename so that 
 	# the web server thread will see this updated image path.
 	
+	monitor_idx_ = monitor_idx+1
+	
 	if not os.path.exists(imgdir):
 		os.makedirs(imgdir)
 	
@@ -159,7 +161,7 @@ def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
 		nowyear = time.strftime('%Y', now)
-		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idx)
+		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idx_)
 		nowdate = time.strftime('%Y-%m-%d', now)
 		nowhour = time.strftime('%H', now)
 		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
