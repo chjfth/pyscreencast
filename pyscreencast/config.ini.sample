@@ -1,5 +1,8 @@
 [global]
+
+; This is the base port. 2nd, 3rd monitor will use port number upwards.
 SERVER_PORT = 80
+
 TEMPIMG_PRESERVE_MINUTES = 60
 SCREEN_CROP_LEFT = 0
 SCREEN_CROP_RIGHT = 0

@@ -34,7 +34,7 @@ sys_codepage = locale.getpreferredencoding(True)
 
 g_config_ini = os.path.join(THIS_PY_DIR, 'config.ini') # INI content will override following const
 g_ini_section = 'global'
-SERVER_PORT = 8080
+SERVER_PORT = 8080 # This is the base-port. Second monitor will be SERVER_PORT+1.
 TEMPIMG_PRESERVE_MINUTES = 60 * 10
 SCREEN_CROP_LEFT = 0
 SCREEN_CROP_RIGHT = 0
@@ -140,7 +140,7 @@ def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 	return newImg
 
 
-def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
+def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg'):
 	global g_latest_img # input and output
 	
 	# Save current image to a tempimg.
@@ -159,7 +159,7 @@ def save_screen_with_timestamp(monitr, imgdir='.', imgextname='.jpg'):
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
 		nowyear = time.strftime('%Y', now)
-		nowyearmonth = time.strftime('%Y.%m', now)
+		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idx)
 		nowdate = time.strftime('%Y-%m-%d', now)
 		nowhour = time.strftime('%H', now)
 		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
@@ -195,10 +195,11 @@ def nowtimestr_ms_log():
 	timestr = dtnow.strftime('%Y-%m-%d_%H:%M:%S.%f')[:-3] # %f is 6-digit microseconds
 	return timestr
 
-def get_tempdir():
-	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp') )
+def get_tempdir(monitor_idx):
+	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp', 'monitor%d'%(monitor_idx+1)) )
 
-def thread_screen_grabber(is_wait_cherrypy, monitr):
+
+def thread_screen_grabber(is_wait_cherrypy, monitor_idx, monitr):
 	
 	# Wait until cherrypy is ready to accept http request. Thanks to: http://stackoverflow.com/q/2988636/151453
 	# If cherrypy cannot start(listen port occupied etc), there is no sense to grab the screen 
@@ -211,13 +212,13 @@ def thread_screen_grabber(is_wait_cherrypy, monitr):
 	# Since the server has started, I turn off screen logging.
 	cherrypy.log.screen = False
 	
-	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT)
+	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idx)
 
 	global g_quit_flag
 	while g_quit_flag==0:
 		
 		try:
-			save_screen_with_timestamp(monitr, get_tempdir(), '.jpg')
+			save_screen_with_timestamp(monitor_idx, monitr, get_tempdir(monitor_idx), '.jpg')
 		except SaveImageError as e:
 			timestr = nowtimestr_ms_log()
 			print('#######[%s] %s Will retry later'%(timestr, e.errmsg))
@@ -237,6 +238,10 @@ def thread_screen_grabber(is_wait_cherrypy, monitr):
 
 
 class StringGenerator(object):
+	
+	def __init__(self, monitor_idx):
+		self.monitor_idx = monitor_idx
+	
 	@cherrypy.expose
 	def index(self):
 		return open( os.path.join(THIS_PY_DIR, 'index.html') )
@@ -287,7 +292,7 @@ class StringGenerator(object):
 		ansi = usertext.encode(sys_codepage, errors='replace')
 		print 'Got set_usertext: '+ ansi[:8000] # usertext[:8000]
 		
-		txtpath = os.path.join(get_tempdir(), 'usertext.txt')
+		txtpath = os.path.join(get_tempdir(self.monitor_idx), 'usertext.txt')
 		open(txtpath, 'w').write(usertext.encode('utf8')) # If not encode('utf8'), it fails and Chrome gets weird stack trace
 		os.system('start "" "%s"'%(txtpath))
 
@@ -296,7 +301,7 @@ class StringGenerator(object):
 	def get_usertext(self, _='0'):
 
 		print 'Got get_usertext.'
-		txtpath = os.path.join(get_tempdir(), 'usertext.txt')
+		txtpath = os.path.join(get_tempdir(self.monitor_idx), 'usertext.txt')
 		
 		try:
 			filetxt = open(txtpath, 'r').read()
@@ -336,7 +341,7 @@ def gbk_errorPage(**kwargs):
   return template.encode('gbk').decode('utf8') % kwargs
 
 
-def start_webserver():
+def start_webserver(monitor_idx):
 	# Web server cpde based on tut06.py from http://docs.cherrypy.org/en/latest/tutorials.html
 	conf = {
 		'/': {
@@ -349,10 +354,10 @@ def start_webserver():
 		},
 		'/temp': {
 			'tools.staticdir.on': True,
-			'tools.staticdir.dir': get_tempdir()
+			'tools.staticdir.dir': get_tempdir(monitor_idx)
 		}
 	}
-	cherrypy.server.socket_port = SERVER_PORT
+	cherrypy.server.socket_port = SERVER_PORT + monitor_idx
 	cherrypy.server.socket_host = '0.0.0.0'
 	cherrypy.log.access_file = 'access.log'
 	cherrypy.log.error_file = 'error.log'
@@ -363,7 +368,7 @@ def start_webserver():
 
 	
 	try:
-		cherrypy.quickstart(StringGenerator(), '/', conf)
+		cherrypy.quickstart(StringGenerator(monitor_idx), '/', conf)
 		# print '++++++++++++++++++++++++++'
 		# Note: If user press Ctrl+C to quit the server, we'll get here.
 		# !!! But, If the server fails to start due to listen port occupied by others, 
@@ -381,17 +386,20 @@ def get_my_ipaddress_str():
 	return ipstr
 	
 
-def gen_QR_html(ipstr, http_port):
+def gen_QR_html(ipstr, http_port_base, monitor_idx):
 	# Note: This html(with QR code) is to be viewed on server machine, not on client machine.
 	# This QR code will be display on the big meeting room projector screen of the server PC,
 	# so that attenders(human) can scan this big QR to reach our web server.
 	
-	pngdir = get_tempdir() # local FS png path
+	monitor_idx_ = monitor_idx+1
+	
+	pngdir = get_tempdir(monitor_idx) # local FS png path
 	pngpath = os.path.join(pngdir, '_qrcode_url.png') # local FS png path
 	if not os.path.exists(pngdir):
 		os.makedirs(pngdir)
 
 	url_text = 'http://' + ipstr
+	http_port = http_port_base + monitor_idx
 	if http_port!=80:
 		url_text += ':'+str(http_port)
 		
@@ -399,10 +407,11 @@ def gen_QR_html(ipstr, http_port):
 	qr.png(pngpath, scale=4, quiet_zone=2)
 
 	# Replace text from html template
-	htmlpath = os.path.join(THIS_PY_DIR, '_qrcode.html')
+	htmlpath = os.path.join(THIS_PY_DIR, '_qrcode_m%d.html'%(monitor_idx_))
 	tmpl_htmlpath = os.path.join(THIS_PY_DIR, 'qrcode.html.template')
 	html_text = open(tmpl_htmlpath).read()
 	html_text = html_text.replace('http://x.x.x.x', url_text)
+	html_text = html_text.replace('${monitor_idx_}', "%d"%(monitor_idx_))
 	html_text = html_text.replace('${FILEPATH_CONFIG_INI}', g_config_ini)
 	open(htmlpath, 'w').write(html_text)
 
@@ -494,7 +503,7 @@ def select_a_monitor():
 		if idx>=1 and idx<=mcount:
 			break; 
 	
-	return monitrs[idx-1]
+	return idx-1, monitrs[idx-1]
 
 
 def IWantPhysicalResolution():
@@ -507,19 +516,19 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20220116.2"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230101.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
 	load_ini_configs()
 	
-	monitr = select_a_monitor()
-	thread.start_new_thread(thread_screen_grabber, (True, monitr))
+	monitor_idx, monitr = select_a_monitor()
+	thread.start_new_thread(thread_screen_grabber, (True, monitor_idx, monitr))
 	
-	start_webserver() # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
+	start_webserver(monitor_idx) # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
 	
 	if DELETE_TEMP_ON_QUIT:
-		tempdir = get_tempdir()
+		tempdir = get_tempdir(monitor_idx)
 		print '\n\n[pyscreencast] deleting temp dir %s ...'%(tempdir)
 		shutil.rmtree(tempdir, ignore_errors=True)
 
