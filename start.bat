@@ -11,6 +11,8 @@ if not exist "Python27" (
 	unzip Python27.zip
 )
 
-cmd /C title pyscreencast && python %batdir%\pyscreencast\pyscreencast.py
+title pyscreencast
+
+python %batdir%\pyscreencast\pyscreencast.py
 
 rem echo %batdir%
