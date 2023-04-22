@@ -489,21 +489,39 @@ def select_a_monitor():
 	if(mcount==1):
 		return monitrs[0] # Only a single display monitor
 	
-	# Let user select a monitor to grab
-	print 'You have more than one monitors. Please select one to use.'
-	for i, mon in enumerate(monitrs):
-		moninfo = win32api.GetMonitorInfo(mon[0])
-		screenw = moninfo['Monitor'][2]-moninfo['Monitor'][0]
-		screenh = moninfo['Monitor'][3]-moninfo['Monitor'][1]
-		print '[%d] %d*%d %s'%(i+1, screenw, screenh, '(Primary)' if moninfo['Flags']==1 else '')
+	is_showpos = False
 	
 	while True:
-		ascii_key = raw_input('Type 1 - %d and press Enter:'%(mcount));
-		if len(ascii_key)!=1:
-			continue
+		# Let user select a monitor to grab
+		print 'You have more than one monitors. Please select one to use.'
+		for i, mon in enumerate(monitrs):
+			moninfo = win32api.GetMonitorInfo(mon[0])
+			monpos = moninfo['Monitor']
+			screenw = monpos[2]-monpos[0]
+			screenh = monpos[3]-monpos[1]
+			primary_hint = '(Primary)' if moninfo['Flags']==1 else ''
+			if not is_showpos:
+				print '[%d] %d*%d %s'%(i+1, screenw, screenh, primary_hint)
+			else:
+				print('[%d] %d*%d  (%d, %d) - (%d, %d)'%(i+i, 
+					screenw, screenh, 
+					monpos[0], monpos[1], monpos[2], monpos[3]
+					))
+		
+		if not is_showpos:
+			print('[0] Show position')
+		
+		while True:
+			ascii_key = raw_input('Type 1 - %d and press Enter:'%(mcount));
+			if len(ascii_key)==1:
+				break
+
 		idx = ord(ascii_key)-ord('0')
 		if idx>=1 and idx<=mcount:
-			break; 
+			break;
+		else:
+			is_showpos = True
+			continue
 	
 	return idx-1, monitrs[idx-1]
 
