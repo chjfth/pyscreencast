@@ -536,7 +536,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230101.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230422.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
