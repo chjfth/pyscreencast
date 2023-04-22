@@ -497,18 +497,31 @@ def select_a_monitor():
 		for i, mon in enumerate(monitrs):
 			moninfo = win32api.GetMonitorInfo(mon[0])
 			monpos = moninfo['Monitor']
+
+			# moninfo['Device'] contains string like r'\\.\DISPLAY4',
+			# the trailing '4' matches the seqno that Windows control-panel
+			# identifies it. So we follow that seqno.
+			# Note: This seqno does NOT necessarily matches i+1 here.
+			DISPLAYx = moninfo['Device']
+			DISPLAY_prefix = r'\\.\DISPLAY'
+			if(DISPLAYx.startswith(DISPLAY_prefix)):
+				seqno = DISPLAYx[len(DISPLAY_prefix):]
+			else:
+				seqno = '?'
+
 			screenw = monpos[2]-monpos[0]
 			screenh = monpos[3]-monpos[1]
 			primary_hint = '(Primary)' if moninfo['Flags']==1 else ''
 			if not is_showpos:
-				print '[%d] %d*%d %s'%(i+1, screenw, screenh, primary_hint)
+				print '[%s] %d*%d %s'%(seqno, screenw, screenh, primary_hint)
 			else:
-				print('[%d] %d*%d  (%d, %d) - (%d, %d)'%(i+1, 
+				print('[%s] %d*%d  (%d, %d) - (%d, %d)'%(seqno,
 					screenw, screenh, 
 					monpos[0], monpos[1], monpos[2], monpos[3]
 					))
 		
 		if not is_showpos:
+			print('')
 			print('[0] Show position')
 		
 		while True:
@@ -536,7 +549,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230422.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230422.2"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
