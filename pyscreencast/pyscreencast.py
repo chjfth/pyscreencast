@@ -503,7 +503,7 @@ def select_a_monitor():
 			if not is_showpos:
 				print '[%d] %d*%d %s'%(i+1, screenw, screenh, primary_hint)
 			else:
-				print('[%d] %d*%d  (%d, %d) - (%d, %d)'%(i+i, 
+				print('[%d] %d*%d  (%d, %d) - (%d, %d)'%(i+1, 
 					screenw, screenh, 
 					monpos[0], monpos[1], monpos[2], monpos[3]
 					))

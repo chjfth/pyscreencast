@@ -11,5 +11,6 @@ if not exist "Python27" (
 	unzip Python27.zip
 )
 
+REM With `cmd /c`, the CMD title is restored after python process finishes.
 cmd /c @title pyscreencast && python %batdir%\pyscreencast\pyscreencast.py
 
