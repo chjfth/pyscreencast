@@ -490,33 +490,87 @@ def select_a_monitor():
 		return monitrs[0] # Only a single display monitor
 	
 	is_showpos = False
+
+	# We are going to list monitors to the user.
+	"""
+	[2023-04-24] There are three idx sequence here.
+	* idxENUM : The enumeration index from `monitrs`, starting from 0, continuous.
+	* idxDISPLAY : The idx in \\.\DISPLAY1, \\.\DISPLAY2 devicenames
+		Note that this sequence may NOT be continuous. For example, from a 3-monitor system,
+		If we unplug \\.\DISPLAY2, there will be \\.\DISPLAY1 and \\.DISPLAY3 remaining.
+	* idxUI : This is a monitor ordinal displayed to user in Windows control-panel.
+		These idx will always be continous and starts from 1.
 	
+	I'd like to list multiple monitors in idxENUM order, and, I'll try to match 
+	the ordinals to that of idxUI. Such as this:
+	
+		You have more than one monitors. Please select one to use.
+		[1] 2560*1440
+		[3] 2160*3840
+		[4] 2560*1440
+		[5] 1920*1080
+		[6] 1920*1200
+		[2] 3200*1800 (Primary)
+		
+		[0] Show position
+		Type 1 - 6 and press Enter:0
+		You have more than one monitors. Please select one to use.
+		[1] \\.\DISPLAY1 , 2560*1440  (0, -1440) - (2560, 0)
+		[3] \\.\DISPLAY3 , 2160*3840  (3200, -1066) - (5360, 2774)
+		[4] \\.\DISPLAY4 , 2560*1440  (-2560, 360) - (0, 1800)
+		[5] \\.\DISPLAY5 , 1920*1080  (-1924, -720) - (-4, 360)
+		[6] \\.\DISPLAY6 , 1920*1200  (-1358, 1800) - (562, 3000)
+		[2] \\.\DISPLAY2 , 3200*1800  (0, 0) - (3200, 1800)
+		
+	But, today, I find that "start ms-settings:display" sometimes arranges the ordinals wrongly,
+	while colorcpl.exe's [Identify monitors] button does it correctly. My code here matches  
+	that of colorcpl.exe .
+	"""
+	ar_idxDISPLAY = []
+	ar_win32moninfo = []
+	for mon in monitrs:
+		# mon[0] is a PyHandle to a win32 monitor object, like 0x10001, 0x10003, 0x10005 etc
+		# mon[1] is a NULL handle
+		# mon[2] is a tuple of (Left, Top, Right, Bottom) coordinates
+		win32moninfo = win32api.GetMonitorInfo(mon[0])
+		ar_win32moninfo.append(win32moninfo)
+
+		DISPLAYn = win32moninfo['Device']  # contains string like r'\\.\DISPLAY2'.
+		DISPLAY_prefix = r'\\.\DISPLAY'
+		if (DISPLAYn.startswith(DISPLAY_prefix)):
+			idxDISPLAY = int(DISPLAYn[len(DISPLAY_prefix):])
+		else:
+			idxDISPLAY = 0  # use 0 as invalid value, should not see it
+
+		win32moninfo['idxDISPLAY'] = idxDISPLAY # add our custom key
+
+		ar_idxDISPLAY.append(idxDISPLAY)
+
+	ar_idxDISPLAY.sort()
+
+	mapDISPLAYtoUI = {}
+	for i in range(len(ar_idxDISPLAY)):
+		mapDISPLAYtoUI[ar_idxDISPLAY[i]] = i + 1
+
 	while True:
 		# Let user select a monitor to grab
 		print 'You have more than one monitors. Please select one to use.'
-		for i, mon in enumerate(monitrs):
-			moninfo = win32api.GetMonitorInfo(mon[0])
-			monpos = moninfo['Monitor']
 
-			# moninfo['Device'] contains string like r'\\.\DISPLAY4',
-			# the trailing '4' matches the seqno that Windows control-panel
-			# identifies it. So we follow that seqno.
-			# Note: This seqno does NOT necessarily matches i+1 here.
-			DISPLAYx = moninfo['Device']
-			DISPLAY_prefix = r'\\.\DISPLAY'
-			if(DISPLAYx.startswith(DISPLAY_prefix)):
-				seqno = DISPLAYx[len(DISPLAY_prefix):]
-			else:
-				seqno = '?'
+		for i, win32moninfo in enumerate(ar_win32moninfo):
+			monpos = win32moninfo['Monitor']
+
+			idxUI = mapDISPLAYtoUI[ win32moninfo['idxDISPLAY'] ]
 
 			screenw = monpos[2]-monpos[0]
 			screenh = monpos[3]-monpos[1]
-			primary_hint = '(Primary)' if moninfo['Flags']==1 else ''
+			primary_hint = '(Primary)' if win32moninfo['Flags']==1 else ''
 			if not is_showpos:
-				print '[%s] %d*%d %s'%(seqno, screenw, screenh, primary_hint)
+				print '[%d] %d*%d %s'%(idxUI, screenw, screenh, primary_hint)
 			else:
-				print('[%s] %d*%d  (%d, %d) - (%d, %d)'%(seqno,
-					screenw, screenh, 
+				print(r'[%d] \\.\DISPLAY%d , %d*%d  (%d, %d) - (%d, %d)'%(
+					idxUI,
+					idxDISPLAY,
+					screenw, screenh, # %d*%d resolution
 					monpos[0], monpos[1], monpos[2], monpos[3]
 					))
 		
@@ -549,7 +603,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230422.2"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230424.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
