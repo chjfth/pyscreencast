@@ -559,7 +559,8 @@ def select_a_monitor():
 		for i, win32moninfo in enumerate(ar_win32moninfo):
 			monpos = win32moninfo['Monitor']
 
-			idxUI = mapDISPLAYtoUI[ win32moninfo['idxDISPLAY'] ]
+			idxDISPLAY = win32moninfo['idxDISPLAY']
+			idxUI = mapDISPLAYtoUI[ idxDISPLAY ]
 
 			screenw = monpos[2]-monpos[0]
 			screenh = monpos[3]-monpos[1]
