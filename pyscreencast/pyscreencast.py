@@ -189,6 +189,8 @@ def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg
 	newImg.path = newpath.replace(os.sep, '/')
 	g_latest_img = newImg # update g_latest_img
 	print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
+	if filepath_bkpng:
+		print "Backup :", filepath_bkpng
 	return
 
 
@@ -604,7 +606,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230424.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230506.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
