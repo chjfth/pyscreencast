@@ -489,7 +489,7 @@ def select_a_monitor():
 	monitrs = win32api.EnumDisplayMonitors()
 	mcount = len(monitrs)
 	if(mcount==1):
-		return monitrs[0] # Only a single display monitor
+		return 0, monitrs[0] # Only a single display monitor
 	
 	is_showpos = False
 
@@ -606,7 +606,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230506.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230515.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
