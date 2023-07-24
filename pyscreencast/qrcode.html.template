@@ -46,7 +46,7 @@
 		<!-- note: "http://x.x.x.x" is a replacing signature recognized by pyscreencast.py -->
 		<p class="no-margin" id="qr_title"><a href="http://x.x.x.x">http://x.x.x.x</a></p>
 
-    	<div id="qr_area"><img id="qr_image" src="../temp/monitor${monitor_idx_}/_qrcode_url.png" /></div>
+    	<div id="qr_area"><img id="qr_image" src="../temp/monitor${monitor_idxUI}/_qrcode_url.png" /></div>
     	
     	<div id="bottom_line">
     		<p class="ip_tip">如果以上自动推测的 IP 地址不是你期望的，请在配置文件中用 MYIP_OVERRIDE 指定期望的 IP 。

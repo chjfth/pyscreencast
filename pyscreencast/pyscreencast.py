@@ -58,6 +58,9 @@ g_qr_img = None # will be a Img class
 
 g_testvar = 0
 
+def zero_base_it(idx):
+	return idx - 1
+
 class SaveImageError(Exception):
 	def __init__(self, errmsg):
 		self.errmsg = errmsg
@@ -140,7 +143,7 @@ def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 	return newImg
 
 
-def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg'):
+def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.jpg'):
 	global g_latest_img # input and output
 	
 	# Save current image to a tempimg.
@@ -149,8 +152,6 @@ def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg
 	# If they are different, I'll rename tempimg to a timestamp-ed filename 
 	# and update g_latest_img.path with this new filename so that 
 	# the web server thread will see this updated image path.
-	
-	monitor_idx_ = monitor_idx+1
 	
 	if not os.path.exists(imgdir):
 		os.makedirs(imgdir)
@@ -161,7 +162,7 @@ def save_screen_with_timestamp(monitor_idx, monitr, imgdir='.', imgextname='.jpg
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
 		nowyear = time.strftime('%Y', now)
-		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idx_)
+		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idxUI)
 		nowdate = time.strftime('%Y-%m-%d', now)
 		nowhour = time.strftime('%H', now)
 		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
@@ -199,11 +200,11 @@ def nowtimestr_ms_log():
 	timestr = dtnow.strftime('%Y-%m-%d_%H:%M:%S.%f')[:-3] # %f is 6-digit microseconds
 	return timestr
 
-def get_tempdir(monitor_idx):
-	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp', 'monitor%d'%(monitor_idx+1)) )
+def get_tempdir(monitor_idxUI):
+	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp', 'monitor%d'%(monitor_idxUI)) )
 
 
-def thread_screen_grabber(is_wait_cherrypy, monitor_idx, monitr):
+def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
 	
 	# Wait until cherrypy is ready to accept http request. Thanks to: http://stackoverflow.com/q/2988636/151453
 	# If cherrypy cannot start(listen port occupied etc), there is no sense to grab the screen 
@@ -216,13 +217,13 @@ def thread_screen_grabber(is_wait_cherrypy, monitor_idx, monitr):
 	# Since the server has started, I turn off screen logging.
 	cherrypy.log.screen = False
 	
-	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idx)
+	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idxUI)
 
 	global g_quit_flag
 	while g_quit_flag==0:
 		
 		try:
-			save_screen_with_timestamp(monitor_idx, monitr, get_tempdir(monitor_idx), '.jpg')
+			save_screen_with_timestamp(monitor_idxUI, monitr, get_tempdir(monitor_idxUI), '.jpg')
 		except SaveImageError as e:
 			timestr = nowtimestr_ms_log()
 			print('#######[%s] %s Will retry later'%(timestr, e.errmsg))
@@ -345,7 +346,7 @@ def gbk_errorPage(**kwargs):
   return template.encode('gbk').decode('utf8') % kwargs
 
 
-def start_webserver(monitor_idx):
+def start_webserver(monitor_idxUI):
 	# Web server cpde based on tut06.py from http://docs.cherrypy.org/en/latest/tutorials.html
 	conf = {
 		'/': {
@@ -358,10 +359,10 @@ def start_webserver(monitor_idx):
 		},
 		'/temp': {
 			'tools.staticdir.on': True,
-			'tools.staticdir.dir': get_tempdir(monitor_idx)
+			'tools.staticdir.dir': get_tempdir(monitor_idxUI)
 		}
 	}
-	cherrypy.server.socket_port = SERVER_PORT + monitor_idx
+	cherrypy.server.socket_port = SERVER_PORT + zero_base_it(monitor_idxUI)
 	cherrypy.server.socket_host = '0.0.0.0'
 	cherrypy.log.access_file = 'access.log'
 	cherrypy.log.error_file = 'error.log'
@@ -372,7 +373,7 @@ def start_webserver(monitor_idx):
 
 	
 	try:
-		cherrypy.quickstart(StringGenerator(monitor_idx), '/', conf)
+		cherrypy.quickstart(StringGenerator(monitor_idxUI), '/', conf)
 		# print '++++++++++++++++++++++++++'
 		# Note: If user press Ctrl+C to quit the server, we'll get here.
 		# !!! But, If the server fails to start due to listen port occupied by others, 
@@ -390,20 +391,18 @@ def get_my_ipaddress_str():
 	return ipstr
 	
 
-def gen_QR_html(ipstr, http_port_base, monitor_idx):
+def gen_QR_html(ipstr, http_port_base_, monitor_idxUI):
 	# Note: This html(with QR code) is to be viewed on server machine, not on client machine.
 	# This QR code will be display on the big meeting room projector screen of the server PC,
 	# so that attenders(human) can scan this big QR to reach our web server.
 	
-	monitor_idx_ = monitor_idx+1
-	
-	pngdir = get_tempdir(monitor_idx) # local FS png path
+	pngdir = get_tempdir(monitor_idxUI) # local FS png path
 	pngpath = os.path.join(pngdir, '_qrcode_url.png') # local FS png path
 	if not os.path.exists(pngdir):
 		os.makedirs(pngdir)
 
 	url_text = 'http://' + ipstr
-	http_port = http_port_base + monitor_idx
+	http_port = http_port_base_ + zero_base_it(monitor_idxUI)
 	if http_port!=80:
 		url_text += ':'+str(http_port)
 		
@@ -411,11 +410,11 @@ def gen_QR_html(ipstr, http_port_base, monitor_idx):
 	qr.png(pngpath, scale=4, quiet_zone=2)
 
 	# Replace text from html template
-	htmlpath = os.path.join(THIS_PY_DIR, '_qrcode_m%d.html'%(monitor_idx_))
+	htmlpath = os.path.join(THIS_PY_DIR, '_qrcode_m%d.html'%(monitor_idxUI))
 	tmpl_htmlpath = os.path.join(THIS_PY_DIR, 'qrcode.html.template')
 	html_text = open(tmpl_htmlpath).read()
 	html_text = html_text.replace('http://x.x.x.x', url_text)
-	html_text = html_text.replace('${monitor_idx_}', "%d"%(monitor_idx_))
+	html_text = html_text.replace('${monitor_idxUI}', "%d"%(monitor_idxUI))
 	html_text = html_text.replace('${FILEPATH_CONFIG_INI}', g_config_ini)
 	open(htmlpath, 'w').write(html_text)
 
@@ -501,7 +500,7 @@ def select_a_monitor():
 		Note that this sequence may NOT be continuous. For example, from a 3-monitor system,
 		If we unplug \\.\DISPLAY2, there will be \\.\DISPLAY1 and \\.DISPLAY3 remaining.
 	* idxUI : This is a monitor ordinal displayed to user in Windows control-panel.
-		These idx will always be continous and starts from 1.
+		These idx will always be continuous and starts from 1.
 	
 	I'd like to list multiple monitors in idxENUM order, and, I'll try to match 
 	the ordinals to that of idxUI. Such as this:
@@ -526,7 +525,7 @@ def select_a_monitor():
 		
 	But, today, I find that "start ms-settings:display" sometimes arranges the ordinals wrongly,
 	while colorcpl.exe's [Identify monitors] button does it correctly. My code here matches  
-	that of colorcpl.exe .
+	that of colorcpl.exe, bcz I cannot find a way to match that of ms-settings:display.
 	"""
 	ar_idxDISPLAY = []
 	ar_win32moninfo = []
@@ -563,6 +562,8 @@ def select_a_monitor():
 
 			idxDISPLAY = win32moninfo['idxDISPLAY']
 			idxUI = mapDISPLAYtoUI[ idxDISPLAY ]
+			
+			win32moninfo['idxUI'] = idxUI
 
 			screenw = monpos[2]-monpos[0]
 			screenh = monpos[3]-monpos[1]
@@ -586,14 +587,44 @@ def select_a_monitor():
 			if len(ascii_key)==1:
 				break
 
-		idx = ord(ascii_key)-ord('0')
-		if idx>=1 and idx<=mcount:
+		# currently support max 9 monitors
+		idxUI = ord(ascii_key)-ord('0')
+		if idxUI>=1 and idxUI<=mcount:
 			break;
 		else:
 			is_showpos = True
 			continue
 	
-	return idx-1, monitrs[idx-1]
+	# User has selected an idxUI !
+	
+	""" Note: If user explicitly "Disconnect" a monitor in Win10 `start ms-settings:display`,
+	The idxDISPLAY sequences may not be continuous. For example, no \\.\DISPLAY2 below:
+	
+You have more than one monitors. Please select one to use.
+[3] 3200*1800 (Primary)
+[4] 1920*1080
+[5] 1920*1200
+[1] 2560*1440
+[2] 2160*3840
+
+[0] Show position
+Type 1 - 5 and press Enter:0
+You have more than one monitors. Please select one to use.
+[3] \\.\DISPLAY4 , 3200*1800  (0, 0) - (3200, 1800)
+[4] \\.\DISPLAY5 , 1920*1080  (-1924, -720) - (-4, 360)
+[5] \\.\DISPLAY6 , 1920*1200  (-1358, 1800) - (562, 3000)
+[1] \\.\DISPLAY1 , 2560*1440  (-2560, 360) - (0, 1800)
+[2] \\.\DISPLAY3 , 2160*3840  (3200, -1066) - (5360, 2774)
+Type 1 - 5 and press Enter:5
+
+( We will get idxUI=5, idxENUM=2 .)
+	"""
+	
+	for idxENUM, win32moninfo in enumerate(ar_win32moninfo):
+		if(win32moninfo['idxUI']==idxUI):
+			break
+
+	return idxUI, monitrs[ idxENUM ]
 
 
 def IWantPhysicalResolution():
@@ -604,21 +635,22 @@ def IWantPhysicalResolution():
 		# On Win7, we fall back to this:
 		windll.user32.SetProcessDPIAware()
 
+
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230515.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230724.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
 	load_ini_configs()
 	
-	monitor_idx, monitr = select_a_monitor()
-	thread.start_new_thread(thread_screen_grabber, (True, monitor_idx, monitr))
+	monitor_idxUI, monitr = select_a_monitor()
+	thread.start_new_thread(thread_screen_grabber, (True, monitor_idxUI, monitr))
 	
-	start_webserver(monitor_idx) # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
+	start_webserver(monitor_idxUI) # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
 	
 	if DELETE_TEMP_ON_QUIT:
-		tempdir = get_tempdir(monitor_idx)
+		tempdir = get_tempdir(monitor_idxUI)
 		print '\n\n[pyscreencast] deleting temp dir %s ...'%(tempdir)
 		shutil.rmtree(tempdir, ignore_errors=True)
 
