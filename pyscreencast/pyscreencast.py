@@ -347,7 +347,7 @@ def gbk_errorPage(**kwargs):
 
 
 def start_webserver(monitor_idxUI):
-	# Web server cpde based on tut06.py from http://docs.cherrypy.org/en/latest/tutorials.html
+	# Web server code based on tut06.py from http://docs.cherrypy.org/en/latest/tutorials.html
 	conf = {
 		'/': {
 			'tools.sessions.on': False, # True,
@@ -488,7 +488,7 @@ def select_a_monitor():
 	monitrs = win32api.EnumDisplayMonitors()
 	mcount = len(monitrs)
 	if(mcount==1):
-		return 0, monitrs[0] # Only a single display monitor
+		return 1, monitrs[0] # Only a single display monitor
 	
 	is_showpos = False
 
@@ -598,7 +598,7 @@ def select_a_monitor():
 	# User has selected an idxUI !
 	
 	""" Note: If user explicitly "Disconnect" a monitor in Win10 `start ms-settings:display`,
-	The idxDISPLAY sequences may not be continuous. For example, no \\.\DISPLAY2 below:
+	The idxDISPLAY sequences may not be contiguous. For example, no \\.\DISPLAY2 below:
 	
 You have more than one monitors. Please select one to use.
 [3] 3200*1800 (Primary)
@@ -638,7 +638,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230724.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20230828.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
