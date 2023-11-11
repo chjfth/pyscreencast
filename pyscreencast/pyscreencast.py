@@ -569,9 +569,9 @@ def select_a_monitor():
 			screenh = monpos[3]-monpos[1]
 			primary_hint = '(Primary)' if win32moninfo['Flags']==1 else ''
 			if not is_showpos:
-				print '[%d] %d*%d %s'%(idxUI, screenw, screenh, primary_hint)
+				print '<%d> %d*%d %s'%(idxUI, screenw, screenh, primary_hint)
 			else:
-				print(r'[%d] \\.\DISPLAY%d , %d*%d  (%d, %d) - (%d, %d)'%(
+				print(r'<%d> \\.\DISPLAY%d , %d*%d  (%d, %d) - (%d, %d)'%(
 					idxUI,
 					idxDISPLAY,
 					screenw, screenh, # %d*%d resolution
@@ -583,7 +583,7 @@ def select_a_monitor():
 			print('[0] Show position')
 		
 		while True:
-			ascii_key = raw_input('Type 1 - %d and press Enter:'%(mcount));
+			ascii_key = raw_input('Type 1 .. %d and press Enter:'%(mcount));
 			if len(ascii_key)==1:
 				break
 
@@ -638,7 +638,7 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20230828.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20231111.1"%(THIS_PROGRAM)
 	
 	IWantPhysicalResolution()
 	
