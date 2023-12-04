@@ -10,6 +10,8 @@ import filecmp
 import time
 from datetime import datetime
 import thread
+from time import struct_time
+
 import win32con
 import win32gui
 import win32ui 
@@ -44,8 +46,11 @@ DELETE_TEMP_ON_QUIT = 1 # 1 means yes, 0 means no
 MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
 DIR_BACKUP_PNG = ""
-PNG_BACKUP_PRESERVE_DAYS = 30    # 0 means preserve forever, no clean
+PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no clean
 PNG_BACKUP_SIMULATE_DEL = True #False # True as debugging purpose, delete_outdated_pngs()
+PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
+
+g_check_stale_png_prev_uesec = 0
 
 g_quit_flag = 0
 
@@ -63,11 +68,11 @@ g_testvar = 0
 def zero_base_it(idx):
 	return idx - 1
 
-def is_dirnamptn_monitor(dirnam):
-	m = re.match(r'[0-9]{4}\.[0-9]{2}-monitor[0-9]+', dirnam)
+def is_dirnamptn_monitor(dirnam, monitor_idxUI):
+	m = re.match(r'[0-9]{4}\.[0-9]{2}-monitor%d'%(monitor_idxUI), dirnam)
 	return True if m else False
 
-def is_dirnameptn_date(dirnam):
+def is_dirnamptn_date(dirnam):
 	m = re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', dirnam)
 	return True if m else False
 
@@ -155,7 +160,8 @@ def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 
 def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.jpg'):
 	global g_latest_img # input and output
-	
+	global g_check_stale_png_prev_uesec
+
 	# Save current image to a tempimg.
 	# Compare the image content of tempimg and g_latest_img.path. 
 	# If they are the same, I'll leave g_latest_img.path intact.
@@ -174,16 +180,23 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		nowyear = time.strftime('%Y', now)
 
 		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idxUI)
-		assert(is_dirnamptn_monitor(nowyearmonth))
+		assert(is_dirnamptn_monitor(nowyearmonth, monitor_idxUI))
 
 		nowdate = time.strftime('%Y-%m-%d', now)
-		assert (is_dirnamptn_monitor(nowdate))
+		assert (is_dirnamptn_date(nowdate))
 
 		nowhour = time.strftime('%H', now)
 
 		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
 		filename_bkpng = os.path.splitext(os.path.basename(newpath))[0] + '.png'
 		filepath_bkpng = os.path.join(dir_bkpng, filename_bkpng)
+
+		uesec_now = int(time.time())
+		uesec_diff = uesec_now - g_check_stale_png_prev_uesec
+		if uesec_diff > PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS:
+			print("Cleaning up stale backup-pngs...")
+			delete_outdated_pngs(monitor_idxUI)
+			g_check_stale_png_prev_uesec = uesec_now
 	else:
 		filepath_bkpng = None
 
@@ -210,6 +223,7 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		print "Backup :", filepath_bkpng
 	return
 
+
 def is_outdated_by_date(dirnam):
 	# dirname should be in format like "2023-12-04".
 	# If preserve for 1 day, and now local-date is 2023-12-05 (any hour),
@@ -223,27 +237,27 @@ def is_outdated_by_date(dirnam):
 	today = time.localtime()
 	ts_now = time.mktime(( today.tm_year, today.tm_mon, today.tm_mday, 0,0,0, 0,0,0 ))
 
-	ts_diff = ts_now-ts_old
+	ts_diff = int(ts_now) - int(ts_old)
 	if ts_diff > PNG_BACKUP_PRESERVE_DAYS*(3600*24):
 		return True
 	else:
 		return False
 
 
-def delete_outdated_pngs():
-	dirpngroot = r"L:\temp\20231204" # temptest
+def delete_outdated_pngs(monitor_idxUI):
+	dirpngroot = DIR_BACKUP_PNG
 	for root, subdirs, files in os.walk(dirpngroot, topdown=True):
 
 		simu_prefix = "[Simulate]" if PNG_BACKUP_SIMULATE_DEL else ""
 
 		_, rootdirnam = os.path.split(root)
-		if is_dirnamptn_monitor(rootdirnam):
+		if is_dirnamptn_monitor(rootdirnam, monitor_idxUI):
 
 			ondisk_subdirs = subdirs[:] # make a copy
 
 			# Check each subdirs, to see if they have been outdated.
 			for subdirnam in subdirs[:]:
-				if is_dirnameptn_date(subdirnam):
+				if is_dirnamptn_date(subdirnam):
 
 					# If subdirname is already sth like "2023-12-04", no need to recurse into it.
 					subdirs.remove(subdirnam)
@@ -296,6 +310,10 @@ def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
 	cherrypy.log.screen = False
 	
 	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idxUI)
+
+	if DIR_BACKUP_PNG:
+		print("DIR_BACKUP_PNG = %s"%(DIR_BACKUP_PNG))
+		print("PNG_BACKUP_PRESERVE_DAYS = %d"%(PNG_BACKUP_PRESERVE_DAYS))
 
 	global g_quit_flag
 	while g_quit_flag==0:
@@ -565,7 +583,7 @@ def load_ini_configs():
 		pass
 
 	try:
-		days = iniobj.get(g_ini_section, "PNG_BACKUP_PRESERVE_DAYS")
+		days = int(iniobj.get(g_ini_section, "PNG_BACKUP_PRESERVE_DAYS"))
 		if days<0:
 			days = 0
 		PNG_BACKUP_PRESERVE_DAYS = days
@@ -729,11 +747,8 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20231111.x"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20231204.1"%(THIS_PROGRAM)
 
-	delete_outdated_pngs() # temptest
-	exit(0)
-	
 	IWantPhysicalResolution()
 	
 	load_ini_configs()
