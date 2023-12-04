@@ -4,7 +4,7 @@
 # This is a web server(only for Windows), which cast current screen image to client web browser.
 # Client web browser gets an index.html who periodically requests new images from server, via AJAX.
 
-import os, sys
+import os, sys, re
 import shutil
 import filecmp
 import time
@@ -44,6 +44,8 @@ DELETE_TEMP_ON_QUIT = 1 # 1 means yes, 0 means no
 MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
 DIR_BACKUP_PNG = ""
+PNG_BACKUP_PRESERVE_DAYS = 30    # 0 means preserve forever, no clean
+PNG_BACKUP_SIMULATE_DEL = True #False # True as debugging purpose, delete_outdated_pngs()
 
 g_quit_flag = 0
 
@@ -60,6 +62,14 @@ g_testvar = 0
 
 def zero_base_it(idx):
 	return idx - 1
+
+def is_dirnamptn_monitor(dirnam):
+	m = re.match(r'[0-9]{4}\.[0-9]{2}-monitor[0-9]+', dirnam)
+	return True if m else False
+
+def is_dirnameptn_date(dirnam):
+	m = re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', dirnam)
+	return True if m else False
 
 class SaveImageError(Exception):
 	def __init__(self, errmsg):
@@ -162,9 +172,15 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
 		nowyear = time.strftime('%Y', now)
+
 		nowyearmonth = time.strftime('%Y.%m', now) + '-monitor%d'%(monitor_idxUI)
+		assert(is_dirnamptn_monitor(nowyearmonth))
+
 		nowdate = time.strftime('%Y-%m-%d', now)
+		assert (is_dirnamptn_monitor(nowdate))
+
 		nowhour = time.strftime('%H', now)
+
 		dir_bkpng = os.path.join(DIR_BACKUP_PNG, nowyearmonth, nowdate, nowhour)
 		filename_bkpng = os.path.splitext(os.path.basename(newpath))[0] + '.png'
 		filepath_bkpng = os.path.join(dir_bkpng, filename_bkpng)
@@ -194,6 +210,68 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		print "Backup :", filepath_bkpng
 	return
 
+def is_outdated_by_date(dirnam):
+	# dirname should be in format like "2023-12-04".
+	# If preserve for 1 day, and now local-date is 2023-12-05 (any hour),
+	# I'll consider the preserving duration is still valid.
+	# Dirnam "2023-12-04" will be deleted when now local-date is 2023-12-06.
+
+	m = re.match(r'([0-9]{4})-([0-9]{2})-([0-9]{2})', dirnam)
+	assert(m)
+	ts_old = time.mktime(( int(m.group(1)), int(m.group(2)), int(m.group(3)), 0,0,0, 0,0,0 ))
+
+	today = time.localtime()
+	ts_now = time.mktime(( today.tm_year, today.tm_mon, today.tm_mday, 0,0,0, 0,0,0 ))
+
+	ts_diff = ts_now-ts_old
+	if ts_diff > PNG_BACKUP_PRESERVE_DAYS*(3600*24):
+		return True
+	else:
+		return False
+
+
+def delete_outdated_pngs():
+	dirpngroot = r"L:\temp\20231204" # temptest
+	for root, subdirs, files in os.walk(dirpngroot, topdown=True):
+
+		simu_prefix = "[Simulate]" if PNG_BACKUP_SIMULATE_DEL else ""
+
+		_, rootdirnam = os.path.split(root)
+		if is_dirnamptn_monitor(rootdirnam):
+
+			ondisk_subdirs = subdirs[:] # make a copy
+
+			# Check each subdirs, to see if they have been outdated.
+			for subdirnam in subdirs[:]:
+				if is_dirnameptn_date(subdirnam):
+
+					# If subdirname is already sth like "2023-12-04", no need to recurse into it.
+					subdirs.remove(subdirnam)
+
+					# We check/compare the time by dirname itself,
+					# not by filesystem recorded modification time.
+					if is_outdated_by_date(subdirnam):
+						dirpath_remove = os.path.join(root, subdirnam)
+
+						print("%sRmDir stale: %s"%(simu_prefix, dirpath_remove))
+						ondisk_subdirs.remove(subdirnam)
+
+						if PNG_BACKUP_SIMULATE_DEL==False:
+							try:
+								shutil.rmtree(dirpath_remove)
+							except OSError as e:
+								print("RmDir Error:", e.message)
+
+			# Check if rootdirname itself is empty
+			if len(ondisk_subdirs)==0 and len(files)==0:
+				print("%sRmDir empty: %s" % (simu_prefix, root))
+				if PNG_BACKUP_SIMULATE_DEL==False:
+					try:
+						os.rmdir(root)
+					except OSError as e:
+						print("RmDir error:", e.message)
+
+	pass
 
 def nowtimestr_ms_log():
 	dtnow = datetime.now()
@@ -436,6 +514,8 @@ def load_ini_configs():
 	global MYIP_OVERRIDE
 	global SERVER_SHOW_QRCODE
 	global DIR_BACKUP_PNG
+	global PNG_BACKUP_PRESERVE_DAYS
+	global PNG_BACKUP_SIMULATE_DEL
 	
 	iniobj = ConfigParser.ConfigParser()
 	iniobj.read(g_config_ini)
@@ -482,6 +562,17 @@ def load_ini_configs():
 		print 'Error: Cannot create DIR_BACKUP_PNG folder: "%s".'%(DIR_BACKUP_PNG)
 		exit(2)
 	except: 
+		pass
+
+	try:
+		days = iniobj.get(g_ini_section, "PNG_BACKUP_PRESERVE_DAYS")
+		if days<0:
+			days = 0
+		PNG_BACKUP_PRESERVE_DAYS = days
+
+		simudel = int(iniobj.get(g_ini_section, "PNG_BACKUP_SIMULATE_DEL"))
+		PNG_BACKUP_SIMULATE_DEL = False if simudel==0 else True
+	except:
 		pass
 
 def select_a_monitor():
@@ -638,7 +729,10 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20231111.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20231111.x"%(THIS_PROGRAM)
+
+	delete_outdated_pngs() # temptest
+	exit(0)
 	
 	IWantPhysicalResolution()
 	
