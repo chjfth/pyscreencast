@@ -38,6 +38,7 @@ g_config_ini = os.path.join(THIS_PY_DIR, 'config.ini') # INI content will overri
 g_ini_section = 'global'
 SERVER_PORT = 8080 # This is the base-port. Second monitor will be SERVER_PORT+1.
 TEMPIMG_PRESERVE_MINUTES = 60 * 10
+SCREEN_SAVE_INTERVAL_SECONDS = 2
 SCREEN_CROP_LEFT = 0
 SCREEN_CROP_RIGHT = 0
 SCREEN_CROP_TOP = 0
@@ -327,9 +328,11 @@ def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
 			timestr = nowtimestr_ms_log()
 			print('#######[%s] Got exception in thread_screen_grabber thread. Will retry later.'%(timestr))
 			traceback.print_exception(*sys.exc_info()) # print the traceback text.
-		
-		for i in range(20):
-			time.sleep(0.1)
+
+		inner_sleep_secs = 0.1
+		pause_cycles = int(SCREEN_SAVE_INTERVAL_SECONDS/inner_sleep_secs)
+		for i in range(pause_cycles):
+			time.sleep(inner_sleep_secs)
 			if g_quit_flag:
 				break
 
@@ -526,6 +529,7 @@ def gen_QR_html(ipstr, http_port_base_, monitor_idxUI):
 
 def load_ini_configs():
 	global SERVER_PORT
+	global SCREEN_SAVE_INTERVAL_SECONDS
 	global TEMPIMG_PRESERVE_MINUTES
 	global SCREEN_CROP_LEFT, SCREEN_CROP_RIGHT, SCREEN_CROP_TOP, SCREEN_CROP_BOTTOM
 	global DELETE_TEMP_ON_QUIT
@@ -546,6 +550,14 @@ def load_ini_configs():
 		if(TEMPIMG_PRESERVE_MINUTES<1):
 			TEMPIMG_PRESERVE_MINUTES = 1
 	except: 
+		pass
+
+	try:
+		secs = int(iniobj.get(g_ini_section, 'SCREEN_SAVE_INTERVAL_SECONDS'))
+		if(secs<1):
+			secs = 1
+		SCREEN_SAVE_INTERVAL_SECONDS = secs
+	except:
 		pass
 
 	try: SCREEN_CROP_LEFT = int(iniobj.get(g_ini_section, 'SCREEN_CROP_LEFT'))

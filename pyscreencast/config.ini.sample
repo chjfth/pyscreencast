@@ -4,6 +4,8 @@
 SERVER_PORT = 80
 ; SERVER_PORT = 8081
 
+; SCREEN_SAVE_INTERVAL_SECONDS = 2
+
 TEMPIMG_PRESERVE_MINUTES = 60
 SCREEN_CROP_LEFT = 0
 SCREEN_CROP_RIGHT = 0
@@ -19,4 +21,4 @@ SERVER_SHOW_QRCODE = 1
 ; If DIR_BACKUP_PNG is set, each screenshot will be saved to this dir, 
 ; one folder each day, so that they are preserved permanently.
 ;DIR_BACKUP_PNG = d:\pyscreencast-history
-;#PNG_BACKUP_PRESERVE_DAYS = 30
+;PNG_BACKUP_PRESERVE_DAYS = 30
