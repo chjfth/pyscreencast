@@ -20,5 +20,7 @@ SERVER_SHOW_QRCODE = 1
 
 ; If DIR_BACKUP_PNG is set, each screenshot will be saved to this dir, 
 ; one folder each day, so that they are preserved permanently.
-;DIR_BACKUP_PNG = d:\pyscreencast-history
-;PNG_BACKUP_PRESERVE_DAYS = 30
+; DIR_BACKUP_PNG = d:\pyscreencast-history
+
+; PNG_BACKUP_SIMULATE_DEL = 0
+; PNG_BACKUP_PRESERVE_DAYS = 30

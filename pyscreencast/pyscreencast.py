@@ -48,7 +48,7 @@ MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
 DIR_BACKUP_PNG = ""
 PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no clean
-PNG_BACKUP_SIMULATE_DEL = True #False # True as debugging purpose, delete_outdated_pngs()
+PNG_BACKUP_SIMULATE_DEL = False # True as debugging purpose, delete_outdated_pngs()
 PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
 
 g_check_stale_png_prev_uesec = 0
