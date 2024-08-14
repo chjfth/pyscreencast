@@ -791,8 +791,10 @@ if __name__=='__main__':
 		# got python syntax error etc.
 		start_webserver(monitor_idxUI) 
 	else:
+		# a small sleep to avoid two-threads "print" to same line.
+		time.sleep(0.1)
+		
 		print("SERVER_PORT is 0, not acting as HTTP server.")
-		print("")
 		while True:
 			time.sleep(10)
 	
