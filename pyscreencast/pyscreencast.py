@@ -30,7 +30,7 @@ import cherrypy
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
 sys.path.append( os.path.join(THIS_PY_DIR,'../_pyshare') );
-from selfclean_tempfile import selfclean_create_tempfile
+from selfclean_tempfile import selfclean_create_tempfile, tmpfilename_from_epsec
 
 sys_codepage = locale.getpreferredencoding(True)
 
@@ -52,6 +52,7 @@ PNG_BACKUP_SIMULATE_DEL = False # True as debugging purpose, delete_outdated_png
 PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
 
 g_check_stale_png_prev_uesec = 0
+g_want_http_server = False
 
 g_quit_flag = 0
 
@@ -131,23 +132,24 @@ def save_screen_as_bmp(monitr, filepath):
 #	if g_testvar==3: return 9/(g_testvar-3) # trigger exception (test only)
 	
 
-def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
+def save_screen_image(monitr, cast_imgpath, tmpdir="", backup_imgpath=None):
 	# Capture the screen and save it to a image file.
-	# imgpath: the image filepath to save, including dir & filename.
+	# cast_imgpath: the image filepath to save, including dir & filename.
 	bmpname = "__temp.bmp"
-	if tmpdir:
+	if tmpdir or (not cast_imgpath):
 		bmppath = os.path.join(tmpdir, bmpname)
 	else:
-		bmppath = os.path.join(os.path.split(imgpath)[0], bmpname)
-	
+		bmppath = os.path.join(os.path.split(cast_imgpath)[0], bmpname)
+
 	save_screen_as_bmp(monitr, bmppath)
 	
 	imsrc = Image.open(bmppath)
 	
-	if imgpath.endswith('.jpg'):
-		imsrc.save(imgpath, quality=80)
-	else:
-		imsrc.save(imgpath)
+	if cast_imgpath:
+		if cast_imgpath.endswith('.jpg'):
+			imsrc.save(cast_imgpath, quality=80)
+		else:
+			imsrc.save(cast_imgpath)
 
 	if backup_imgpath:
 		dir_bkimg = os.path.dirname(backup_imgpath)
@@ -155,8 +157,11 @@ def save_screen_image(monitr, imgpath, tmpdir="", backup_imgpath=None):
 			os.makedirs(dir_bkimg)
 		imsrc.save(backup_imgpath)
 
-	newImg = Img(imgpath, imsrc.size[0], imsrc.size[1])
-	return newImg
+	if cast_imgpath:
+		newImg = Img(cast_imgpath, imsrc.size[0], imsrc.size[1])
+		return newImg
+	else:
+		return None
 
 
 def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.jpg'):
@@ -174,7 +179,15 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		os.makedirs(imgdir)
 	
 	tmpimgpath = os.path.join(imgdir, '_temp'+imgextname)
-	newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES * 60)
+	tmpimgdir = os.path.split(tmpimgpath)[0]
+
+	if g_want_http_server:
+		# This will create a 0-byte tempfile, so don't call it for non-HTTP-server scene.
+		newpath = selfclean_create_tempfile(imgdir, 'screen', imgextname, TEMPIMG_PRESERVE_MINUTES * 60)
+	else:
+		uesec = time.time()
+		newname = tmpfilename_from_epsec(int(uesec), ".%03d"%int(uesec*1000%1000), 'screen', imgextname)
+		newpath = os.path.join(imgdir, newname)
 
 	if DIR_BACKUP_PNG:
 		now = time.localtime()
@@ -200,30 +213,39 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 			g_check_stale_png_prev_uesec = uesec_now
 	else:
 		filepath_bkpng = None
+	
+	newImg = save_screen_image(monitr, 
+		tmpimgpath if g_want_http_server else "", 
+		tmpdir=tmpimgdir,
+		backup_imgpath=filepath_bkpng)
 
-	newImg = save_screen_image(monitr, tmpimgpath, backup_imgpath=filepath_bkpng)
+	if g_want_http_server:
+		try:
+			if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
+				return g_latest_img.path # g_latest_img intact
+		except OSError:
+			# Possibly due to the file referred to by g_latest_img has been deleted by selfclean_create_tempfile().
+			# This can happen if:
+			#   we sleep our computer for a time period longer than selfclean_create_tempfile()'s 
+			#   temp-file preserving period, and then wakeup the computer.
+			g_latest_img = None
+		
+		# Prepare a new g_latest_img.
+		
+		shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
+		
+		newImg.path = newpath.replace(os.sep, '/')
+		g_latest_img = newImg # update g_latest_img
+		print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
 
-	try:
-		if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
-			return g_latest_img.path # g_latest_img intact
-	except OSError:
-		# Possibly due to the file referred to by g_latest_img has been deleted by selfclean_create_tempfile().
-		# This can happen if:
-		#   we sleep our computer for a time period longer than selfclean_create_tempfile()'s 
-		#   temp-file preserving period, and then wakeup the computer.
-		g_latest_img = None
-	
-	# Prepare a new g_latest_img.
-	
-	shutil.move(tmpimgpath, newpath) # the newpath file will be overwritten, yes, the very desired atomic effect
-	
-	newImg.path = newpath.replace(os.sep, '/')
-	g_latest_img = newImg # update g_latest_img
-	print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
 	if filepath_bkpng:
 		print "Backup :", filepath_bkpng
 	return
 
+#def generate_castimage_filepath(imgdir):
+#	uesec = time.time()
+#	newpath = tmpfilename_from_epsec(imgdir, 'screen', imgextname)
+	
 
 def is_outdated_by_date(dirnam):
 	# dirname should be in format like "2023-12-04".
@@ -772,21 +794,21 @@ def IWantPhysicalResolution():
 		windll.user32.SetProcessDPIAware()
 
 
-if __name__=='__main__':
-	
-	print "Jimm Chen's %s version 20240814.1"%(THIS_PROGRAM)
+def do_main():
+	print "Jimm Chen's %s version 20240814.2"%(THIS_PROGRAM)
 
 	IWantPhysicalResolution()
 	
 	load_ini_configs()
 	
-	is_wait_http_server = True if SERVER_PORT>0 else False
+	global g_want_http_server
+	g_want_http_server = True if SERVER_PORT>0 else False
 		
 	
 	monitor_idxUI, monitr = select_a_monitor()
-	thread.start_new_thread(thread_screen_grabber, (is_wait_http_server, monitor_idxUI, monitr))
+	thread.start_new_thread(thread_screen_grabber, (g_want_http_server, monitor_idxUI, monitr))
 	
-	if is_wait_http_server:
+	if g_want_http_server:
 		# this does not return until the server finishes, Ctrl+C break, 
 		# got python syntax error etc.
 		start_webserver(monitor_idxUI) 
@@ -821,3 +843,6 @@ if __name__=='__main__':
 #		#save_screen_as_bmp("_temp.bmp")
 #		save_screen_image("temp.jpg")
 #		time.sleep(0.1)
+
+if __name__=='__main__':
+	do_main()
