@@ -521,6 +521,8 @@ def gen_QR_html(ipstr, http_port_base_, monitor_idxUI):
 	im_qrcode = Image.open(pngpath)
 	g_qr_img = Img(pngpath, im_qrcode.size[0], im_qrcode.size[1])
 
+	print("HTTP client access URL: " + url_text)
+
 	if SERVER_SHOW_QRCODE:
 		# Open the system default web browser viewing that html, no blocking myself.
 		os.system('start "SomeTitle" "%s"'%(htmlpath)) 
@@ -539,6 +541,15 @@ def load_ini_configs():
 	global DIR_BACKUP_PNG
 	global PNG_BACKUP_PRESERVE_DAYS
 	global PNG_BACKUP_SIMULATE_DEL
+	
+	
+	if not os.path.exists(g_config_ini):
+		try:
+			config_ini_sample = g_config_ini + ".sample"
+			print("Generating default %s"%(g_config_ini))
+			shutil.copyfile(config_ini_sample, g_config_ini)
+		except OSError:
+			pass
 	
 	iniobj = ConfigParser.ConfigParser()
 	iniobj.read(g_config_ini)
