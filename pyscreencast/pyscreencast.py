@@ -47,7 +47,7 @@ DELETE_TEMP_ON_QUIT = 1 # 1 means yes, 0 means no
 MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
 DIR_BACKUP_PNG = ""
-PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no clean
+PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no cleanup
 PNG_BACKUP_SIMULATE_DEL = False # True as debugging purpose, delete_outdated_pngs()
 PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
 
@@ -310,7 +310,8 @@ def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
 	# Since the server has started, I turn off screen logging.
 	cherrypy.log.screen = False
 	
-	gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idxUI)
+	if is_wait_cherrypy:
+		gen_QR_html(MYIP_OVERRIDE, SERVER_PORT, monitor_idxUI)
 
 	if DIR_BACKUP_PNG:
 		print("DIR_BACKUP_PNG = %s"%(DIR_BACKUP_PNG))
@@ -586,6 +587,9 @@ def load_ini_configs():
 
 	try: 
 		DIR_BACKUP_PNG = iniobj.get(g_ini_section, "DIR_BACKUP_PNG")
+		
+		DIR_BACKUP_PNG = os.path.abspath(DIR_BACKUP_PNG)
+		
 		if DIR_BACKUP_PNG and not os.path.exists(DIR_BACKUP_PNG):
 			os.makedirs(DIR_BACKUP_PNG)
 	except OSError:
@@ -759,16 +763,27 @@ def IWantPhysicalResolution():
 
 if __name__=='__main__':
 	
-	print "Jimm Chen's %s version 20231204.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20240814.1"%(THIS_PROGRAM)
 
 	IWantPhysicalResolution()
 	
 	load_ini_configs()
 	
-	monitor_idxUI, monitr = select_a_monitor()
-	thread.start_new_thread(thread_screen_grabber, (True, monitor_idxUI, monitr))
+	is_wait_http_server = True if SERVER_PORT>0 else False
+		
 	
-	start_webserver(monitor_idxUI) # this does not return until the server finishes, Ctrl+C break, got python syntax error etc.
+	monitor_idxUI, monitr = select_a_monitor()
+	thread.start_new_thread(thread_screen_grabber, (is_wait_http_server, monitor_idxUI, monitr))
+	
+	if is_wait_http_server:
+		# this does not return until the server finishes, Ctrl+C break, 
+		# got python syntax error etc.
+		start_webserver(monitor_idxUI) 
+	else:
+		print("SERVER_PORT is 0, not acting as HTTP server.")
+		print("")
+		while True:
+			time.sleep(10)
 	
 	if DELETE_TEMP_ON_QUIT:
 		tempdir = get_tempdir(monitor_idxUI)
