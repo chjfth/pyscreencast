@@ -129,14 +129,18 @@ def save_screen_as_bmp(monitr, filepath):
 			thisscreen_at_x = moninfo['Monitor'][0]
 			thisscreen_at_y = moninfo['Monitor'][1]
 
-			cursorinfo = win32gui.GetIconInfo(hcursor) # returns a PyICONINFO object
-			xHotspot = cursorinfo[1]
-			yHotspot = cursorinfo[2]
+			# Note: If an EXE calls ShowCursor(FALSE) to hide the mouse cursor
+			# hcursor will be NULL. So we need to check hcursor.
 
-			drawcursor_at_x = curx - thisscreen_at_x - xHotspot
-			drawcursor_at_y = cury - thisscreen_at_y - yHotspot
+			if hcursor:
+				cursorinfo = win32gui.GetIconInfo(hcursor) # returns a PyICONINFO object
+				xHotspot = cursorinfo[1]
+				yHotspot = cursorinfo[2]
 
-			cDC.DrawIcon((drawcursor_at_x, drawcursor_at_y), hcursor);
+				drawcursor_at_x = curx - thisscreen_at_x - xHotspot
+				drawcursor_at_y = cury - thisscreen_at_y - yHotspot
+
+				cDC.DrawIcon((drawcursor_at_x, drawcursor_at_y), hcursor);
 		
 		dataBitMap.SaveBitmapFile(cDC, filepath)
 		
