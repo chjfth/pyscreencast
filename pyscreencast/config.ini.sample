@@ -19,6 +19,9 @@ SCREEN_CROP_RIGHT = 0
 SCREEN_CROP_TOP = 0
 SCREEN_CROP_BOTTOM = 0
 
+DRAW_MOUSE_CURSOR = 1
+; -- 1: Draw current mouse cursor on screenshot. 0: Do not draw mouse cursor.
+
 ; MYIP_OVERRIDE = 192.168.100.181
 
 DELETE_TEMP_ON_QUIT = 1

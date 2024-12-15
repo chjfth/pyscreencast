@@ -50,6 +50,7 @@ DIR_BACKUP_PNG = ""
 PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no cleanup
 PNG_BACKUP_SIMULATE_DEL = False # True as debugging purpose, delete_outdated_pngs()
 PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
+DRAW_MOUSE_CURSOR = True
 
 g_check_stale_png_prev_uesec = 0
 g_want_http_server = False
@@ -109,14 +110,36 @@ def save_screen_as_bmp(monitr, filepath):
 		# hwnd = win32gui.FindWindow(None, "DEV.ahk")
 		intDC = win32gui.CreateDC('DISPLAY', winDisplayName, None) # returns an int
 			# limitation: mouse cursor and caret will not be captured.
-		dcWin=win32ui.CreateDCFromHandle(intDC) # dcWin is a pyCDC object
-		cDC=dcWin.CreateCompatibleDC()
-		dataBitMap = win32ui.CreateBitmap()
+		
+		dcWin = win32ui.CreateDCFromHandle(intDC) # dcWin is a PyCDC object (as Src)
+		cDC = dcWin.CreateCompatibleDC()        # cDC a also a PyCDC object (as Dst)
+		
+		dataBitMap = win32ui.CreateBitmap() # returns a PyCBitmap object
 		dataBitMap.CreateCompatibleBitmap(dcWin, w, h)
+		
 		cDC.SelectObject(dataBitMap)
 		cDC.BitBlt((0,0),(w, h) , dcWin, (x,y), win32con.SRCCOPY)
-			# Note: Having Win81 enter lock-screen will cause BitBlt to raise win32ui.error .
+			# Note: Win81 entering lock-screen will cause BitBlt to raise win32ui.error .
+
+		if DRAW_MOUSE_CURSOR:
+			# Draw current mouse cursor onto the screenshot.
+
+			_flags, hcursor, (curx, cury) = win32gui.GetCursorInfo()
+			# -- curx, cury is screen-position from primary monitor
+			thisscreen_at_x = moninfo['Monitor'][0]
+			thisscreen_at_y = moninfo['Monitor'][1]
+
+			cursorinfo = win32gui.GetIconInfo(hcursor) # returns a PyICONINFO object
+			xHotspot = cursorinfo[1]
+			yHotspot = cursorinfo[2]
+
+			drawcursor_at_x = curx - thisscreen_at_x - xHotspot
+			drawcursor_at_y = cury - thisscreen_at_y - yHotspot
+
+			cDC.DrawIcon((drawcursor_at_x, drawcursor_at_y), hcursor);
+		
 		dataBitMap.SaveBitmapFile(cDC, filepath)
+		
 	except win32ui.error as e:
 		raise SaveImageError(
 			'Got win32ui.error exception in save_screen_as_bmp("%s", "%s").'%(
@@ -563,6 +586,7 @@ def load_ini_configs():
 	global DIR_BACKUP_PNG
 	global PNG_BACKUP_PRESERVE_DAYS
 	global PNG_BACKUP_SIMULATE_DEL
+	global DRAW_MOUSE_CURSOR
 	
 	
 	if not os.path.exists(g_config_ini):
@@ -614,8 +638,10 @@ def load_ini_configs():
 	if not MYIP_OVERRIDE:
 		MYIP_OVERRIDE = get_my_ipaddress_str()
 
-	try: 
-		SERVER_SHOW_QRCODE = int(iniobj.get(g_ini_section, 'SERVER_SHOW_QRCODE'))
+	try: SERVER_SHOW_QRCODE = int(iniobj.get(g_ini_section, 'SERVER_SHOW_QRCODE'))
+	except: pass
+
+	try: DRAW_MOUSE_CURSOR = int(iniobj.get(g_ini_section, 'DRAW_MOUSE_CURSOR'))
 	except: pass
 
 	try: 
@@ -795,7 +821,7 @@ def IWantPhysicalResolution():
 
 
 def do_main():
-	print "Jimm Chen's %s version 20240814.2"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version 20241215.1"%(THIS_PROGRAM)
 
 	IWantPhysicalResolution()
 	
