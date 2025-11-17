@@ -16,6 +16,7 @@ import win32con
 import win32gui
 import win32ui 
 import win32api
+import win32process
 import ctypes
 from ctypes import windll
 from ctypes import wintypes
@@ -28,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20251117.1'
+verstr = '20251117.2'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
