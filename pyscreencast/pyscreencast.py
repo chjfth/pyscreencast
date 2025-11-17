@@ -18,6 +18,7 @@ import win32ui
 import win32api
 import ctypes
 from ctypes import windll
+from ctypes import wintypes
 import locale
 import ConfigParser
 import traceback
@@ -26,6 +27,8 @@ import traceback
 import Image
 import pyqrcode
 import cherrypy
+
+verstr = '20251117.1'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -48,6 +51,7 @@ MYIP_OVERRIDE = ''
 SERVER_SHOW_QRCODE = 1 # 1/0: true/false
 DIR_BACKUP_PNG = ""
 PNG_BACKUP_PRESERVE_DAYS = 3    # 0 means preserve forever, no cleanup
+PNG_BACKUP_WINTITLE_CHARS = 100 # 0 if you don't want to append wintitle to png filenames.
 PNG_BACKUP_SIMULATE_DEL = False # True as debugging purpose, delete_outdated_pngs()
 PNG_BACKUP_CHECK_STALE_INTERNAL_SECONDS = 3600
 DRAW_MOUSE_CURSOR = True
@@ -246,6 +250,15 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		tmpdir=tmpimgdir,
 		backup_imgpath=filepath_bkpng)
 
+	# [2025-11-17] rename the backup png to have current active wintitle as filename suffix.
+	if PNG_BACKUP_WINTITLE_CHARS>0:
+		fnsuffix_u = get_wintitle_suffix_for_png()
+		fnsuffix_u = fnsuffix_u[0:PNG_BACKUP_WINTITLE_CHARS]
+		finalpath_bkpng = os.path.splitext(filepath_bkpng)[0] + fnsuffix_u + u'.png'
+		py27_unicode_rename(filepath_bkpng, finalpath_bkpng)
+	else:
+		finalpath_bkpng = filepath_bkpng
+
 	if g_want_http_server:
 		try:
 			if g_latest_img and filecmp.cmp(g_latest_img.path, tmpimgpath):
@@ -266,13 +279,100 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 		print "Updated:", g_latest_img.path.replace('/', os.sep) # debug
 
 	if filepath_bkpng:
-		print "Backup :", filepath_bkpng
+		try:
+			print("Backup : %s"%(finalpath_bkpng))
+		except UnicodeEncodeError:
+			print("Backup : %s (some Unicode cannot be printed)"%(filepath_bkpng))
+			# -- If got this, try to set a CMD console encoding first, then restart pyscreencast.
+			#    For example, run in CMD window: `chcp 936`
 	return
 
-#def generate_castimage_filepath(imgdir):
-#	uesec = time.time()
-#	newpath = tmpfilename_from_epsec(imgdir, 'screen', imgextname)
-	
+
+# Declare Unicode API version of GetModuleFileNameEx
+psapi = ctypes.WinDLL('psapi')
+kernel32 = ctypes.WinDLL('kernel32')
+GetModuleFileNameExW = psapi.GetModuleFileNameExW
+GetModuleFileNameExW.argtypes = [wintypes.HANDLE, wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
+GetModuleFileNameExW.restype = wintypes.DWORD
+
+def get_process_name_by_hwnd(hwnd):
+    # Get PID from window handle
+    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+
+    # Open process handle
+    h_process = win32api.OpenProcess(
+        win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ,
+        False,
+        pid
+    )
+
+    try:
+        # Prepare buffer for Unicode path
+        buf = ctypes.create_unicode_buffer(1024)
+
+        # hmodule = 0 → main module
+        ret = GetModuleFileNameExW(int(h_process), None, buf, 1024)
+        if ret == 0:
+            raise WindowsError(kernel32.GetLastError())
+
+        full_path = buf.value      # this is a Unicode string
+        name = full_path.split(u"\\")[-1]
+        return name
+
+    finally:
+        win32api.CloseHandle(h_process)
+
+def GetWindowTextW(hwnd):
+	length = ctypes.windll.user32.GetWindowTextLengthW(hwnd) + 1
+	buffer = ctypes.create_unicode_buffer(length)
+	ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length)
+	return buffer.value
+
+def sanitize_filename(filename):
+	# Characters not allowed in NTFS filenames:
+#	invalid = ur'[\\/:*?"<>|]'
+#	return re.sub(invalid, u"_", filename)
+	filename = filename.replace(u"\\", u"\uFF3C") # Use the full-width back-slash
+	filename = filename.replace(u"/", u"\uFF0F") # Use the full-width forward-slash
+	filename = filename.replace(u":", u"\uFF1A") # Use the full-width colon
+	filename = filename.replace(u"*", u"\uFF0A") # Use the full-width asterisk
+	filename = filename.replace(u"?", u"\uFF1F") # Use the full-width question mark
+	filename = filename.replace(u'"', u"\uFF02") # Use the full-width double-quote
+	filename = filename.replace(u"<", u"\uFF1C") # Use the full-width <
+	filename = filename.replace(u">", u"\uFF1E") # Use the full-width >
+	filename = filename.replace(u"|", u"\uFF5C") # Use the full-width pipe-char(vertical line)
+	return filename
+
+
+def get_wintitle_suffix_for_png(): # This returns unicode
+	hwnd = win32gui.GetForegroundWindow()
+	if hwnd:
+		wintitle = GetWindowTextW(hwnd)
+		wintitle = wintitle.strip()
+		wintitle = sanitize_filename(wintitle)
+		if wintitle:
+			return u'--' + wintitle
+		else:
+			# fallback to get process exe filename
+			return u'--' + get_process_name_by_hwnd(hwnd)
+	else:
+		return ""
+
+MoveFileW = ctypes.windll.kernel32.MoveFileW
+MoveFileW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+MoveFileW.restype = wintypes.BOOL
+
+def py27_unicode_rename(src, dst):
+    # Ensure arguments are unicode
+    if not isinstance(src, unicode):
+        src = src.decode('utf-8')
+    if not isinstance(dst, unicode):
+        dst = dst.decode('utf-8')
+
+    ok = MoveFileW(src, dst)
+    if not ok:
+        raise WindowsError(ctypes.windll.kernel32.GetLastError())
+
 
 def is_outdated_by_date(dirnam):
 	# dirname should be in format like "2023-12-04".
@@ -589,6 +689,7 @@ def load_ini_configs():
 	global SERVER_SHOW_QRCODE
 	global DIR_BACKUP_PNG
 	global PNG_BACKUP_PRESERVE_DAYS
+	global PNG_BACKUP_WINTITLE_CHARS
 	global PNG_BACKUP_SIMULATE_DEL
 	global DRAW_MOUSE_CURSOR
 	
@@ -667,10 +768,16 @@ def load_ini_configs():
 			days = 0
 		PNG_BACKUP_PRESERVE_DAYS = days
 
+		wintitle_chars = int(iniobj.get(g_ini_section, 'PNG_BACKUP_ADD_WINTITLE'))
+		if(wintitle_chars<0):
+			wintitle_chars = 0
+		PNG_BACKUP_WINTITLE_CHARS = wintitle_chars
+
 		simudel = int(iniobj.get(g_ini_section, "PNG_BACKUP_SIMULATE_DEL"))
 		PNG_BACKUP_SIMULATE_DEL = False if simudel==0 else True
 	except:
 		pass
+		
 
 def select_a_monitor():
 	monitrs = win32api.EnumDisplayMonitors()
@@ -825,7 +932,7 @@ def IWantPhysicalResolution():
 
 
 def do_main():
-	print "Jimm Chen's %s version 20241215.1"%(THIS_PROGRAM)
+	print "Jimm Chen's %s version %s"%(THIS_PROGRAM, verstr)
 
 	IWantPhysicalResolution()
 	

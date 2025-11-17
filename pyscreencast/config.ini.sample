@@ -35,4 +35,6 @@ DIR_BACKUP_PNG = .\png-history
 PNG_BACKUP_PRESERVE_DAYS = 3
 ; -- How many days to preserve PNG backups, 0 means forever.
 
+; PNG_BACKUP_ADD_WINTITLE = 100
+
 ; PNG_BACKUP_SIMULATE_DEL = 0
