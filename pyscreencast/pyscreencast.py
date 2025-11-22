@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20251117.2'
+verstr = '20251122.1'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -281,8 +281,10 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 
 	if filepath_bkpng:
 		try:
-			print("Backup : %s"%(finalpath_bkpng))
+			ansi_output = finalpath_bkpng.encode(sys.stdout.encoding, 'replace') # any bad char will be replaced with '?'
+			print(ansi_output)
 		except UnicodeEncodeError:
+			# Should not get this now, since we have done manual .encode(,'replace')
 			print("Backup : %s (some Unicode cannot be printed)"%(filepath_bkpng))
 			# -- If got this, try to set a CMD console encoding first, then restart pyscreencast.
 			#    For example, run in CMD window: `chcp 936`
