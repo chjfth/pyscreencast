@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20251122.1'
+verstr = '20260426.1'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -398,7 +398,17 @@ def is_outdated_by_date(dirnam):
 
 
 def delete_outdated_pngs(monitor_idxUI):
-	dirpngroot = DIR_BACKUP_PNG
+
+	try:
+		# [2026-04-26] I need to make dirpngroot Unicode-string, bcz I have high probability to encounter
+		# Unicode filenames that cannot be represented in `sys_codepage`.
+		# By making dirpngroot `unicode`, Python2.7 will invoke Unicode variant of WinAPI so that
+		# shutil.rmtree() can remove all files with Unicode filenames.
+		dirpngroot = unicode(DIR_BACKUP_PNG)
+	except:
+		print("!!!Panic: Cannot get unicode representation of DIR_BACKUP_PNG: '%s'"%(DIR_BACKUP_PNG));
+		raise
+
 	for root, subdirs, files in os.walk(dirpngroot, topdown=True):
 
 		simu_prefix = "[Simulate]" if PNG_BACKUP_SIMULATE_DEL else ""
@@ -427,7 +437,13 @@ def delete_outdated_pngs(monitor_idxUI):
 							try:
 								shutil.rmtree(dirpath_remove)
 							except OSError as e:
-								print("RmDir Error:", e.message)
+								print("RmDir Error: %s"%(e.message))
+								if(e.strerror):
+									print("  Reason: %s"%(e.strerror))
+									# Example: The filename, directory name, or volume label syntax is incorrect
+								if(e.filename):
+									print("  Filename: %s"%(e.filename))
+									# Example: i:\pyscreencast-history\chja20\2026.02-monitor2\2026-02-22\07\screen-20260222_073533.132--???? - Google Chrome.png
 
 			# Check if rootdirname itself is empty
 			if len(ondisk_subdirs)==0 and len(files)==0:
