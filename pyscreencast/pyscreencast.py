@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20260426.1'
+verstr = '20260918.1'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -95,7 +95,7 @@ def save_screen_as_bmp(monitr, filepath):
 
 	# monitr is a 3-ele tuple: (hMonitor, hdcMonitor, PyRECT)
 	# win32api.EnumDisplayMonitors() returns such tuples.
-	# monitr. is like r'\\.\DISPLAY1' or r'\\.\DISPLAY2' etc
+	# Assoc moninfo['Device'] is like r'\\.\DISPLAY1' or r'\\.\DISPLAY2' etc
 
 	user32 = ctypes.windll.user32
 	user32.SetProcessDPIAware()
@@ -465,8 +465,22 @@ def get_tempdir(monitor_idxUI):
 	return os.path.abspath( os.path.join(THIS_PY_DIR, '..', 'temp', 'monitor%d'%(monitor_idxUI)) )
 
 
+def Refetch_hMonitor(monitor_idxUI):
+	assert (monitor_idxUI >= 1)
+	monitrs = win32api.EnumDisplayMonitors()
+	mcount = len(monitrs)
+
+	if monitor_idxUI>mcount :
+		return None # Monitor unplugged, (monitor_idxUI-1) no longer exists
+
+	# Return the new hMonitor value.
+	return monitrs[monitor_idxUI-1]
+
+
 def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
-	
+
+	assert(monitor_idxUI >= 1)
+
 	# Wait until cherrypy is ready to accept http request. Thanks to: http://stackoverflow.com/q/2988636/151453
 	# If cherrypy cannot start(listen port occupied etc), there is no sense to grab the screen 
 	# and no sense to show a QR code on server machine's screen.
@@ -487,13 +501,36 @@ def thread_screen_grabber(is_wait_cherrypy, monitor_idxUI, monitr):
 
 	global g_quit_flag
 	while g_quit_flag==0:
-		
+
+		timestr = nowtimestr_ms_log()
 		try:
-			save_screen_with_timestamp(monitor_idxUI, monitr, get_tempdir(monitor_idxUI), '.jpg')
+			if not monitr:
+				print('######[%s] Retrying monitor <%d> (possibly unplugged)...' % (timestr, monitor_idxUI))
+				monitr = Refetch_hMonitor(monitor_idxUI)
+
+			if monitr:
+				save_screen_with_timestamp(monitor_idxUI, monitr, get_tempdir(monitor_idxUI), '.jpg')
+
 		except SaveImageError as e:
-			timestr = nowtimestr_ms_log()
 			print('#######[%s] %s Will retry later'%(timestr, e.errmsg))
-		except:
+
+		except win32api.error as e:
+
+			if e.winerror == 1461: # ERROR_INVALID_MONITOR_HANDLE
+				# This is known case, which happens when there is monitor pluging/unplugging.
+				print('######[%s] Old hMonitor=0x%X is now invalid, now retry for a new handle.'%(timestr, monitr[0]))
+				monitr = Refetch_hMonitor(monitor_idxUI)
+				if monitr:
+					timestr = nowtimestr_ms_log()
+					print('######[%s] New hMonitor=0x%X, now we can resume screen grabbing.' % (timestr, monitr[0]))
+				else:
+					print('###### Sorry, that monitor has been unplugged.')
+
+			else:
+				print('#######[%s] Got Win32 exception in thread_screen_grabber thread. Will retry later.' % (timestr))
+				traceback.print_exception(*sys.exc_info())  # print the traceback text.
+			pass
+		except Exception as e:
 			timestr = nowtimestr_ms_log()
 			print('#######[%s] Got exception in thread_screen_grabber thread. Will retry later.'%(timestr))
 			traceback.print_exception(*sys.exc_info()) # print the traceback text.
