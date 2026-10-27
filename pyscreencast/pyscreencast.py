@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20261027.3'
+verstr = '20261027.4'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -129,23 +129,30 @@ def save_screen_as_bmp(monitr, filepath):
 		if DRAW_MOUSE_CURSOR:
 			# Draw current mouse cursor onto the screenshot.
 
-			_flags, hcursor, (curx, cury) = win32gui.GetCursorInfo()
-			# -- curx, cury is screen-position from primary monitor
-			thisscreen_at_x = moninfo['Monitor'][0]
-			thisscreen_at_y = moninfo['Monitor'][1]
+			try:
+				_flags, hcursor, (curx, cury) = win32gui.GetCursorInfo()
+				# -- curx, cury is screen-position from primary monitor
+				thisscreen_at_x = moninfo['Monitor'][0]
+				thisscreen_at_y = moninfo['Monitor'][1]
 
-			# Note: If an EXE calls ShowCursor(FALSE) to hide the mouse cursor
-			# hcursor will be NULL. So we need to check hcursor.
+				# Note: If an EXE calls ShowCursor(FALSE) to hide the mouse cursor
+				# hcursor will be NULL. So we need to check hcursor.
 
-			if hcursor:
-				cursorinfo = win32gui.GetIconInfo(hcursor) # returns a PyICONINFO object
-				xHotspot = cursorinfo[1]
-				yHotspot = cursorinfo[2]
+				if hcursor:
+					cursorinfo = win32gui.GetIconInfo(hcursor) # returns a PyICONINFO object
+					xHotspot = cursorinfo[1]
+					yHotspot = cursorinfo[2]
 
-				drawcursor_at_x = curx - thisscreen_at_x - xHotspot
-				drawcursor_at_y = cury - thisscreen_at_y - yHotspot
+					drawcursor_at_x = curx - thisscreen_at_x - xHotspot
+					drawcursor_at_y = cury - thisscreen_at_y - yHotspot
 
-				cDC.DrawIcon((drawcursor_at_x, drawcursor_at_y), hcursor);
+					cDC.DrawIcon((drawcursor_at_x, drawcursor_at_y), hcursor);
+			except win32api.error as e:
+				timestr = nowtimestr_ms_log()
+				winerr = kernel32.GetLastError()
+				print('#######[%s] Cannot get mouse cursor info. WinErr=%d, Just ignore it.'%(timestr, winerr))
+				# -- When the Window Desktop is locked, GetCursorInfo() will fail with ERROR_ACCESS_DENIED. Don't mind it.
+				pass
 		
 		dataBitMap.SaveBitmapFile(cDC, filepath)
 		
