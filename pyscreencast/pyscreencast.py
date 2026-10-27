@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20261027.2'
+verstr = '20261027.3'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -294,14 +294,18 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 # Declare Unicode API version of GetModuleFileNameEx
 psapi = ctypes.WinDLL('psapi')
 kernel32 = ctypes.WinDLL('kernel32')
-GetModuleFileNameExW = psapi.GetModuleFileNameExW
-GetModuleFileNameExW.argtypes = [wintypes.HANDLE, wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
-GetModuleFileNameExW.restype = wintypes.DWORD
+#GetModuleFileNameExW = psapi.GetModuleFileNameExW
+#GetModuleFileNameExW.argtypes = [wintypes.HANDLE, wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
+#GetModuleFileNameExW.restype = wintypes.DWORD
+GetProcessImageFileName = psapi.GetProcessImageFileNameW
+GetProcessImageFileName.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD]
+GetProcessImageFileName.restype = wintypes.DWORD
 
 def get_process_name_by_hwnd(hwnd):
 	# Get PID from window handle
 	_, pid = win32process.GetWindowThreadProcessId(hwnd)
 
+	timestr = nowtimestr_ms_log()
 	# Open process handle
 	try:
 	    h_process = win32api.OpenProcess(
@@ -310,20 +314,22 @@ def get_process_name_by_hwnd(hwnd):
 	        pid
 	    )
 	except Exception as e:
-		timestr = nowtimestr_ms_log()
 		print('#######[%s] Temporal error: win32api.OpenProcess() got exeception: %s'%(timestr, str(e)))
 		return "unknown~exe"
+
+	if h_process==0:
+		print('#######[%s] Panic: win32api.OpenProcess() returns NULL without exeception!'%(timestr))
 
 	try:
 		# Prepare buffer for Unicode path
 		buf = ctypes.create_unicode_buffer(1024)
 
 		# hmodule = 0 → main module
-		ret = GetModuleFileNameExW(int(h_process), None, buf, 1024)
+		ret = GetProcessImageFileName(int(h_process), buf, 1024)
 		if ret == 0:
 			timestr = nowtimestr_ms_log()
 			winerr = kernel32.GetLastError()
-			print('#######[%s] Temporal error: GetModuleFileNameExW() returns %s'%(timestr, winerr))
+			print('#######[%s] Temporal error: GetProcessImageFileName() returns WinErr=%s'%(timestr, winerr))
 			return "unknown~exe"
 
 		full_path = buf.value      # this is a Unicode string
