@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20261027.1'
+verstr = '20261027.2'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -361,11 +361,9 @@ def get_wintitle_suffix_for_png(): # This returns unicode
 		wintitle = GetWindowTextW(hwnd)
 		wintitle = wintitle.strip()
 		wintitle = sanitize_filename(wintitle)
-		if wintitle:
-			return u'--' + wintitle
-		else:
-			# fallback to get process exe filename
-			return u'--' + get_process_name_by_hwnd(hwnd)
+
+		# append {process exe filename}
+		return u'--' + wintitle + " {" + get_process_name_by_hwnd(hwnd) + "}"
 	else:
 		return ""
 
