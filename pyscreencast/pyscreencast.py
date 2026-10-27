@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20261027.4'
+verstr = '20261027.5'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -301,9 +301,6 @@ def save_screen_with_timestamp(monitor_idxUI, monitr, imgdir='.', imgextname='.j
 # Declare Unicode API version of GetModuleFileNameEx
 psapi = ctypes.WinDLL('psapi')
 kernel32 = ctypes.WinDLL('kernel32')
-#GetModuleFileNameExW = psapi.GetModuleFileNameExW
-#GetModuleFileNameExW.argtypes = [wintypes.HANDLE, wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
-#GetModuleFileNameExW.restype = wintypes.DWORD
 GetProcessImageFileName = psapi.GetProcessImageFileNameW
 GetProcessImageFileName.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD]
 GetProcessImageFileName.restype = wintypes.DWORD
@@ -316,13 +313,20 @@ def get_process_name_by_hwnd(hwnd):
 	# Open process handle
 	try:
 	    h_process = win32api.OpenProcess(
-	        win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ,
+	        win32con.PROCESS_QUERY_INFORMATION,
 	        False,
 	        pid
 	    )
 	except Exception as e:
-		print('#######[%s] Temporal error: win32api.OpenProcess() got exeception: %s'%(timestr, str(e)))
-		return "unknown~exe"
+		try:
+		    h_process = win32api.OpenProcess(
+		        0x1000, # =PROCESS_QUERY_LIMITED_INFORMATION
+		        False,
+		        pid
+		    )
+		except:
+			print('#######[%s] Temporal error: win32api.OpenProcess() got exeception: %s'%(timestr, str(e)))
+			return "unknown~exe"
 
 	if h_process==0:
 		print('#######[%s] Panic: win32api.OpenProcess() returns NULL without exeception!'%(timestr))
@@ -337,7 +341,7 @@ def get_process_name_by_hwnd(hwnd):
 			timestr = nowtimestr_ms_log()
 			winerr = kernel32.GetLastError()
 			print('#######[%s] Temporal error: GetProcessImageFileName() returns WinErr=%s'%(timestr, winerr))
-			return "unknown~exe"
+			return "Unknown~exe"
 
 		full_path = buf.value      # this is a Unicode string
 		name = full_path.split(u"\\")[-1]
