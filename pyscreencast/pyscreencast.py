@@ -114,7 +114,6 @@ def save_screen_as_bmp(monitr, filepath):
 	try:
 		# hwnd = win32gui.FindWindow(None, "DEV.ahk")
 		intDC = win32gui.CreateDC('DISPLAY', winDisplayName, None) # returns an int
-			# limitation: mouse cursor and caret will not be captured.
 		
 		dcWin = win32ui.CreateDCFromHandle(intDC) # dcWin is a PyCDC object (as Src)
 		cDC = dcWin.CreateCompatibleDC()        # cDC a also a PyCDC object (as Dst)
