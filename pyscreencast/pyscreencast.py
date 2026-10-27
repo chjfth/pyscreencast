@@ -29,7 +29,7 @@ import Image
 import pyqrcode
 import cherrypy
 
-verstr = '20260918.1'
+verstr = '20261027.1'
 
 THIS_PY_DIR = os.path.dirname(__file__)
 THIS_PROGRAM = os.path.basename(__file__)
@@ -299,31 +299,39 @@ GetModuleFileNameExW.argtypes = [wintypes.HANDLE, wintypes.HMODULE, wintypes.LPW
 GetModuleFileNameExW.restype = wintypes.DWORD
 
 def get_process_name_by_hwnd(hwnd):
-    # Get PID from window handle
-    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+	# Get PID from window handle
+	_, pid = win32process.GetWindowThreadProcessId(hwnd)
 
-    # Open process handle
-    h_process = win32api.OpenProcess(
-        win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ,
-        False,
-        pid
-    )
+	# Open process handle
+	try:
+	    h_process = win32api.OpenProcess(
+	        win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ,
+	        False,
+	        pid
+	    )
+	except Exception as e:
+		timestr = nowtimestr_ms_log()
+		print('#######[%s] Temporal error: win32api.OpenProcess() got exeception: %s'%(timestr, str(e)))
+		return "unknown~exe"
 
-    try:
-        # Prepare buffer for Unicode path
-        buf = ctypes.create_unicode_buffer(1024)
+	try:
+		# Prepare buffer for Unicode path
+		buf = ctypes.create_unicode_buffer(1024)
 
-        # hmodule = 0 → main module
-        ret = GetModuleFileNameExW(int(h_process), None, buf, 1024)
-        if ret == 0:
-            raise WindowsError(kernel32.GetLastError())
+		# hmodule = 0 → main module
+		ret = GetModuleFileNameExW(int(h_process), None, buf, 1024)
+		if ret == 0:
+			timestr = nowtimestr_ms_log()
+			winerr = kernel32.GetLastError()
+			print('#######[%s] Temporal error: GetModuleFileNameExW() returns %s'%(timestr, winerr))
+			return "unknown~exe"
 
-        full_path = buf.value      # this is a Unicode string
-        name = full_path.split(u"\\")[-1]
-        return name
+		full_path = buf.value      # this is a Unicode string
+		name = full_path.split(u"\\")[-1]
+		return name
 
-    finally:
-        win32api.CloseHandle(h_process)
+	finally:
+		win32api.CloseHandle(h_process)
 
 def GetWindowTextW(hwnd):
 	length = ctypes.windll.user32.GetWindowTextLengthW(hwnd) + 1
